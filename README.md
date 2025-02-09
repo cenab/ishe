@@ -83,9 +83,9 @@ yarn ios
 
 4. For Android:
 ```bash
-npm run android
-# or if using yarn
-yarn android
+emulator @Pixel_4a_Edited_API_33
+npx expo run:android
+
 ```
 
 ## Using the Application

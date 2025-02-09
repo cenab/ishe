@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, Button, StyleSheet, Platform } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, Button, StyleSheet, Platform, TextInput } from 'react-native';
 import {
   RTCPeerConnection,
   mediaDevices,
@@ -21,6 +21,12 @@ export default function App() {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [transcript, setTranscript] = useState<string>('');
   const [modelResponse, setModelResponse] = useState<string>('');
+  const [isModelSpeaking, setIsModelSpeaking] = useState<boolean>(false);
+  const [currentTranscript, setCurrentTranscript] = useState<string>('');
+  const [isUserSpeaking, setIsUserSpeaking] = useState<boolean>(false);
+  const [userTranscript, setUserTranscript] = useState<string>('');
+  const [textInput, setTextInput] = useState<string>('');
+  const [currentResponseId, setCurrentResponseId] = useState<string | null>(null);
   
   // Refs to store the peer connection and local stream so they can be stopped later
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -29,7 +35,7 @@ export default function App() {
 
   // Function to send a response request to the model
   const sendResponseRequest = () => {
-    if (dataChannelRef.current?.readyState === 'open') {
+    if (dataChannelRef.current?.readyState === 'open' && userTranscript) {
       const responseCreate = {
         type: "response.create",
         response: {
@@ -39,15 +45,129 @@ export default function App() {
             role: "user",
             content: [{
               type: "input_text",
-              text: transcript || "Hello, how can I help you today?"
+              text: userTranscript
             }]
           }]
         },
       };
       dataChannelRef.current.send(JSON.stringify(responseCreate));
       console.log('Sent response request to model:', responseCreate);
+      setUserTranscript(''); // Clear user transcript for next interaction
     } else {
-      console.log('Data channel not ready');
+      console.log('Data channel not ready or no user input');
+    }
+  };
+
+  // Function to send text input as a message
+  const sendTextInput = () => {
+    if (dataChannelRef.current?.readyState === 'open' && textInput.trim()) {
+      const responseCreate = {
+        type: "response.create",
+        response: {
+          modalities: ["audio", "text"],
+          input: [{
+            type: "message",
+            role: "user",
+            content: [{
+              type: "input_text",
+              text: textInput.trim()
+            }]
+          }]
+        },
+      };
+      dataChannelRef.current.send(JSON.stringify(responseCreate));
+      console.log('Sent text input to model:', responseCreate);
+      setTextInput(''); // Clear text input
+    }
+  };
+
+  // Function to handle incoming messages
+  const handleMessage = (event: any) => {
+    try {
+      const message = JSON.parse(event.data);
+      console.log('DataChannel message:', message);
+
+      // If this message is from a different response than our current one, ignore it
+      if (message.response_id && currentResponseId && message.response_id !== currentResponseId) {
+        console.log('Ignoring message from old response:', message.response_id);
+        return;
+      }
+
+      switch (message.type) {
+        case 'response.created':
+          console.log('Response created:', message.response.id);
+          setCurrentResponseId(message.response.id);
+          break;
+        case 'response.done':
+          if (message.response.id === currentResponseId) {
+            if (message.response.status === 'failed') {
+              console.error('Response failed:', message.response.status_details);
+            } else {
+              console.log('Response completed:', message.response.id);
+            }
+            setCurrentResponseId(null);
+          }
+          break;
+        case 'transcript':
+          // This is the user's speech transcript
+          setUserTranscript(message.text);
+          setIsUserSpeaking(true);
+          break;
+        case 'response.audio_transcript.delta':
+          if (!currentResponseId || message.response_id === currentResponseId) {
+            setCurrentTranscript(prev => prev + (message.delta || ''));
+            // Clear previous transcript when getting new deltas
+            setTranscript('');
+          }
+          break;
+        case 'response.audio_transcript.done':
+          if (!currentResponseId || message.response_id === currentResponseId) {
+            // Store the final transcript
+            setTranscript(message.transcript);
+            setCurrentTranscript('');
+            setIsUserSpeaking(false);
+          }
+          break;
+        case 'speech.started':
+          if (!currentResponseId || message.response_id === currentResponseId) {
+            console.log('Model started speaking');
+            setIsModelSpeaking(true);
+            // Clear previous transcript when model starts speaking
+            setCurrentTranscript('');
+            setTranscript('');
+          }
+          break;
+        case 'speech.ended':
+          if (!currentResponseId || message.response_id === currentResponseId) {
+            console.log('Model finished speaking');
+            setIsModelSpeaking(false);
+          }
+          break;
+        case 'session.error':
+          console.error('Session error:', message.error);
+          break;
+        case 'error':
+          console.error('Error from server:', message.error);
+          break;
+        case 'text':
+          setModelResponse(message.text);
+          break;
+        case 'session.created':
+        case 'session.updated':
+          console.log(`Session ${message.type}:`, message.session.id);
+          break;
+        case 'response.audio.done':
+        case 'response.content_part.done':
+        case 'response.output_item.done':
+        case 'output_audio_buffer.stopped':
+          // These events indicate different stages of response completion
+          console.log(`Received ${message.type} event`);
+          break;
+        default:
+          console.log('Unhandled message type:', message.type);
+      }
+    } catch (error) {
+      console.error('Error parsing message:', error);
     }
   };
 
@@ -67,110 +187,128 @@ export default function App() {
       });
       pcRef.current = pc;
 
+      // Set up data channel first
+      const dc = pc.createDataChannel('oai-events');
+      dataChannelRef.current = dc;
+
+      dc.addEventListener('open', () => {
+        console.log('Data channel opened');
+        // Send initial session update to configure audio
+        if (dc.readyState === 'open') {
+          const sessionUpdate = {
+            type: 'session.update',
+            session: {
+              input_audio_transcription: {
+                language: 'en',
+                model: 'whisper-1'
+              },
+              input_audio_format: 'pcm16',
+              output_audio_format: 'pcm16',
+              modalities: ['audio', 'text'],
+              turn_detection: {
+                type: 'server_vad',
+                silence_duration_ms: 600,
+                prefix_padding_ms: 300,
+                threshold: 0.5,
+                create_response: true
+              }
+            }
+          };
+          dc.send(JSON.stringify(sessionUpdate));
+          console.log('Sent session update:', sessionUpdate);
+        }
+      });
+
+      dc.addEventListener('message', handleMessage);
+
       // Handle remote stream: store it in state when received
       pc.addEventListener('track', (event: any) => {
         if (event.streams && event.streams[0]) {
           console.log('Remote stream received:', event.streams[0]);
-          setRemoteStream(event.streams[0]);
           
-          // Enable audio tracks
-          event.streams[0].getAudioTracks().forEach((track: MediaStreamTrack) => {
+          // Stop any existing remote stream
+          if (remoteStream) {
+            const tracks = remoteStream.getTracks();
+            tracks.forEach(track => {
+              track.stop();
+              remoteStream.removeTrack(track);
+            });
+            setRemoteStream(null);
+          }
+          
+          // Create a new MediaStream with only one audio track
+          const newStream = new MediaStream();
+          const audioTracks = event.streams[0].getAudioTracks();
+          
+          // Only add the first audio track if it exists
+          if (audioTracks.length > 0) {
+            const track = audioTracks[0];
             track.enabled = true;
-            console.log('Audio track enabled:', track.id);
-          });
+            newStream.addTrack(track);
+            console.log('Added single audio track to new stream:', track.label);
+          }
+          
+          setRemoteStream(newStream);
         }
       });
 
       // Get local audio from the device's microphone
       try {
         console.log('Requesting microphone access...');
-        const localStream = await mediaDevices.getUserMedia({ 
-          audio: true,
-          video: false 
-        });
+        const constraints = {
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        };
+        
+        // Stop any existing local stream before creating a new one
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => {
+            track.stop();
+            track.enabled = false;
+          });
+          localStreamRef.current = null;
+        }
+        
+        const localStream = await mediaDevices.getUserMedia(constraints as any);
         console.log('Microphone access granted');
         
-        // Check audio tracks
-        const audioTracks = localStream.getAudioTracks();
-        console.log('Number of audio tracks:', audioTracks.length);
-        audioTracks.forEach(track => {
-          console.log('Audio track:', {
-            id: track.id,
-            enabled: track.enabled,
-            muted: track.muted,
-            readyState: track.readyState,
-            label: track.label
-          });
-        });
-
         localStreamRef.current = localStream;
         
-        // Add the first audio track to the peer connection
-        const [audioTrack] = localStream.getTracks();
-        if (!audioTrack) {
-          throw new Error('No audio track available');
+        // Add only one audio track to the peer connection
+        const audioTracks = localStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          audioTracks[0].enabled = true;
+          pc.addTrack(audioTracks[0], localStream);
+          console.log('Added audio track to peer connection:', audioTracks[0].label);
+          
+          // Disable any additional tracks
+          audioTracks.slice(1).forEach(track => {
+            track.enabled = false;
+            track.stop();
+          });
         }
-        pc.addTrack(audioTrack, localStream);
-        console.log('Added audio track to peer connection');
+
+        // Send initial audio buffer
+        const audioBuffer = {
+          type: 'input_audio_buffer.append',
+          audio_buffer: {
+            format: 'pcm16',
+            sample_rate: 16000,
+            channel_count: 1
+          }
+        };
+        dc.send(JSON.stringify(audioBuffer));
+        console.log('Sent initial audio buffer config:', audioBuffer);
       } catch (error) {
         console.error('Error accessing microphone:', error);
+        return; // Exit if we can't get microphone access
       }
-
-      // Set up a data channel for sending and receiving events
-      const dc = pc.createDataChannel('oai-events');
-      dataChannelRef.current = dc;
-
-      dc.addEventListener('open', () => {
-        console.log('Data channel opened');
-        // Send initial response request when channel opens
-        sendResponseRequest();
-      });
-
-      dc.addEventListener('message', (event: any) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('DataChannel message:', message);
-
-          switch (message.type) {
-            case 'transcript':
-              setTranscript(message.text);
-              break;
-            case 'speech.started':
-              console.log('Model started speaking');
-              break;
-            case 'speech.ended':
-              console.log('Model finished speaking');
-              break;
-            case 'session.error':
-              console.error('Session error:', message.error);
-              break;
-            case 'error':
-              console.error('Error from server:', message.error);
-              break;
-            case 'text':
-              setModelResponse(message.text);
-              break;
-            case 'response.created':
-              console.log('Response created:', message.response.id);
-              break;
-            case 'response.done':
-              if (message.response.status === 'failed') {
-                console.error('Response failed:', message.response.status_details);
-              } else {
-                console.log('Response completed:', message.response.id);
-              }
-              break;
-            case 'session.created':
-            case 'session.updated':
-              console.log(`Session ${message.type}:`, message.session.id);
-              break;
-            default:
-              console.log('Unhandled message type:', message.type);
-          }
-        } catch (error) {
-          console.error('Error parsing message:', error);
-        }
-      });
 
       // Create an SDP offer and set it as the local description
       const offer = await pc.createOffer({
@@ -191,6 +329,10 @@ export default function App() {
         },
       });
 
+      if (!sdpResponse.ok) {
+        throw new Error(`HTTP error! status: ${sdpResponse.status}`);
+      }
+
       // Parse the SDP answer and set it as the remote description
       const answer = {
         type: 'answer' as RTCSdpType,
@@ -198,28 +340,64 @@ export default function App() {
       };
       await pc.setRemoteDescription(answer);
 
+      // Add ICE candidate handler
+      pc.addEventListener('icecandidate', (event: any) => {
+        if (event.candidate) {
+          console.log('New ICE candidate:', event.candidate);
+        }
+      });
+
       // Update state to indicate that the session is started
       setIsStarted(true);
     } catch (error) {
       console.error('Error during initialization:', error);
+      stop(); // Clean up if initialization fails
     }
   }
 
-  // Function to stop the session (called when "Stop" button is pressed)
+  // Function to stop the session
   async function stop() {
-    // Close the peer connection if it exists
+    // Stop and remove all remote stream tracks
+    if (remoteStream) {
+      const tracks = remoteStream.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+        remoteStream.removeTrack(track);
+      });
+      setRemoteStream(null);
+    }
+    
+    // Stop and remove all local stream tracks
+    if (localStreamRef.current) {
+      const tracks = localStreamRef.current.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+        localStreamRef.current?.removeTrack(track);
+      });
+      localStreamRef.current = null;
+    }
+    
+    // Close data channel
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+    
+    // Close peer connection
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
-    // Stop all tracks of the local stream
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
-    // Reset the remote stream and session state
-    setRemoteStream(null);
+    
+    // Reset all states
     setIsStarted(false);
+    setCurrentTranscript('');
+    setTranscript('');
+    setModelResponse('');
+    setIsModelSpeaking(false);
+    setIsUserSpeaking(false);
+    setUserTranscript('');
+    setCurrentResponseId(null);
   }
 
   return (
@@ -231,35 +409,63 @@ export default function App() {
         <Button title="Enable" onPress={init} color="#5CB85C" />
       )}
       <Text style={styles.status}>
-        {isStarted ? 'Session Started' : 'Session Stopped'}
+        {isStarted ? (
+          isUserSpeaking ? 'Listening to you...' : 
+          isModelSpeaking ? 'Assistant is speaking...' : 
+          'Ready for your input'
+        ) : 'Session Stopped'}
       </Text>
       {remoteStream ? (
         <View style={styles.streamContainer}>
-          <Text>Remote audio stream is available.</Text>
-          <RTCView
-            streamURL={remoteStream.toURL()}
-            style={styles.rtcView}
-          />
-          {transcript && (
+          <Text>Voice connection established</Text>
+          {remoteStream.getAudioTracks().length > 0 && (
+            <RTCView
+              streamURL={remoteStream.toURL()}
+              style={styles.rtcView}
+            />
+          )}
+          
+          {/* Add text input for emulator testing */}
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={textInput}
+              onChangeText={setTextInput}
+              placeholder="Type your message here..."
+              multiline
+              returnKeyType="send"
+              onSubmitEditing={sendTextInput}
+              editable={!isModelSpeaking}
+            />
+            <Button
+              title="Send"
+              onPress={sendTextInput}
+              disabled={isModelSpeaking || !textInput.trim()}
+              color="#5CB85C"
+            />
+          </View>
+
+          {userTranscript && (
             <View style={styles.transcriptContainer}>
-              <Text style={styles.label}>Your message:</Text>
+              <Text style={styles.label}>Your Message:</Text>
+              <Text style={styles.text}>{userTranscript}</Text>
+            </View>
+          )}
+          {/* Show either current transcript or previous response, not both */}
+          {currentTranscript ? (
+            <View style={styles.transcriptContainer}>
+              <Text style={styles.label}>Assistant Speaking:</Text>
+              <Text style={styles.text}>{currentTranscript}</Text>
+            </View>
+          ) : transcript ? (
+            <View style={styles.transcriptContainer}>
+              <Text style={styles.label}>Assistant's Response:</Text>
               <Text style={styles.text}>{transcript}</Text>
             </View>
-          )}
-          {modelResponse && (
-            <View style={styles.transcriptContainer}>
-              <Text style={styles.label}>Model response:</Text>
-              <Text style={styles.text}>{modelResponse}</Text>
-            </View>
-          )}
-          <Button 
-            title="Request Response" 
-            onPress={sendResponseRequest}
-            color="#5CB85C"
-          />
+          ) : null}
         </View>
       ) : (
-        <Text>Waiting for remote stream...</Text>
+        <Text>Establishing connection...</Text>
       )}
     </View>
   );
@@ -268,45 +474,62 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5FCFF',
+    padding: 20,
+    backgroundColor: '#F5F5F5',
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
+    fontWeight: 'bold',
     marginBottom: 20,
+    textAlign: 'center',
   },
   status: {
-    marginVertical: 20,
+    marginTop: 10,
     fontSize: 16,
+    color: '#666',
   },
   streamContainer: {
     width: '100%',
     alignItems: 'center',
   },
   rtcView: {
-    width: 1,  // Minimal size since it's audio-only
+    width: 1,
     height: 1,
-    opacity: 0, // Hide the view since it's audio-only
+    opacity: 0,
   },
   transcriptContainer: {
-    width: '100%',
+    marginTop: 20,
     padding: 10,
-    marginVertical: 5,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFF',
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    width: '100%',
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
-    color: '#666',
   },
   text: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#333',
+  },
+  inputContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+    marginRight: 10,
+    backgroundColor: '#FFF',
+    maxHeight: 100,
   },
 });

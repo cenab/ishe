@@ -47,6 +47,11 @@
         }
       ],
       "expo-dev-client"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fab0e87d-6f29-4dc7-9ea0-820efc7408bb"
+      }
+    }
   }
 }
