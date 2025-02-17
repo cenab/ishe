@@ -7,6 +7,8 @@ import {
   MediaStreamTrack,
   RTCView,
 } from 'react-native-webrtc';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LoginScreen } from './src/screens/LoginScreen';
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
@@ -15,7 +17,8 @@ const API_URL = Platform.select({
   default: 'http://localhost:3000',
 });
 
-export default function App() {
+const MainApp = () => {
+  const { user, session, signOut } = useAuth();
   // State to track whether the session is started and to hold the remote stream
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -81,6 +84,29 @@ export default function App() {
     }
   };
 
+  // Function to store conversation in vector database
+  const storeConversation = async (text: string, metadata: any = {}) => {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+          text,
+          metadata
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to store conversation');
+      }
+    } catch (error) {
+      console.error('Error storing conversation:', error);
+    }
+  };
+
   // Function to handle incoming messages
   const handleMessage = (event: any) => {
     try {
@@ -104,6 +130,13 @@ export default function App() {
               console.error('Response failed:', message.response.status_details);
             } else {
               console.log('Response completed:', message.response.id);
+              // Store the completed conversation
+              if (transcript) {
+                storeConversation(transcript, {
+                  responseId: message.response.id,
+                  userInput: userTranscript
+                });
+              }
             }
             setCurrentResponseId(null);
           }
@@ -112,6 +145,8 @@ export default function App() {
           // This is the user's speech transcript
           setUserTranscript(message.text);
           setIsUserSpeaking(true);
+          // Store user's input
+          storeConversation(message.text, { type: 'user_input' });
           break;
         case 'response.audio_transcript.delta':
           if (!currentResponseId || message.response_id === currentResponseId) {
@@ -174,9 +209,32 @@ export default function App() {
   // Function to initialize the connection (called when "Enable" button is pressed)
   async function init() {
     try {
+      if (!session?.access_token) {
+        throw new Error('No access token available. Please log in again.');
+      }
+
+      console.log('Requesting session token...');
       // Get an ephemeral key from your server
-      const tokenResponse = await fetch(`${API_URL}/session`);
+      const tokenResponse = await fetch(`${API_URL}/session`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.json();
+        console.error('Session token error:', errorData);
+        throw new Error(`Failed to get session token: ${tokenResponse.status} - ${JSON.stringify(errorData)}`);
+      }
+      
       const data = await tokenResponse.json();
+      if (!data.client_secret?.value) {
+        console.error('Invalid response data:', data);
+        throw new Error('Session response missing client secret value');
+      }
+
+      console.log('Successfully obtained session token');
       const EPHEMERAL_KEY = data.client_secret.value;
 
       // Create a new peer connection with STUN servers
@@ -402,6 +460,10 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Dementia Real Talk</Text>
+        <Button title="Sign Out" onPress={signOut} />
+      </View>
       <Text style={styles.title}>Dementia Real Talk React App</Text>
       {isStarted ? (
         <Button title="Stop" onPress={stop} color="#D9534F" />
@@ -469,6 +531,28 @@ export default function App() {
       )}
     </View>
   );
+};
+
+const AppContent = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
+  return user ? <MainApp /> : <LoginScreen />;
+};
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -479,11 +563,15 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#F5F5F5',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
+    marginRight: 10,
   },
   status: {
     marginTop: 10,

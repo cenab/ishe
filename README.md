@@ -1,116 +1,160 @@
 # Dementia Real Talk
 
-A React Native application that enables real-time voice conversations with an AI assistant using OpenAI's Realtime API and WebRTC.
+A real-time conversation application specialized for discussing dementia-related topics, powered by OpenAI and Supabase.
+
+## Project Structure
+
+```
+dementia-real-talk/
+├── supabase/                  # Supabase configuration and migrations
+├── dementia-real-talk-server/ # Backend server
+└── dementia-real-talk-client/ # React Native client
+```
 
 ## Prerequisites
 
-- Node.js (v14 or later)
+- Node.js (v16 or higher)
 - npm or yarn
-- React Native development environment set up
-  - For iOS: Xcode (Mac only)
-  - For Android: Android Studio
+- Supabase CLI
 - OpenAI API key
+- React Native development environment
+- Android Studio with:
+  - Android SDK Platform 33
+  - Android SDK Build-Tools
+  - Android Emulator
+  - Android SDK Platform-Tools
 
-## Environment Setup
+## Setup
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/dementia-real-talk.git
+git clone <repository-url>
 cd dementia-real-talk
 ```
 
-2. Install dependencies:
+2. Install all dependencies:
 ```bash
-# Install client dependencies
-cd dementia-real-talk-client
-npm install
-# or if using yarn
-yarn install
-
-# Install server dependencies
-cd ../dementia-real-talk-server
-npm install
-# or if using yarn
-yarn install
+npm run install:all
 ```
 
-3. Set up environment variables:
-
-Create a `.env` file in the server directory:
+3. Set up Supabase:
 ```bash
-cd dementia-real-talk-server
-cp .env.example .env
+npm run supabase:start
 ```
 
-Edit the `.env` file and add your OpenAI API key:
-```
-OPENAI_API_KEY=your_api_key_here
-```
+4. Configure environment variables:
+- Copy `.env.example` to `.env` in the server directory
+- Fill in the required environment variables
 
-## Running the Application
-
-You'll need to run both the server and client components.
-
-### Start the Server
-
-1. In the server directory:
+5. Android Setup (if needed):
 ```bash
-cd dementia-real-talk-server
-npm start
-# or if using yarn
-yarn start
+# List available Android emulators
+npm run emulator:list
+
+# Create a new emulator if none exists
+npm run emulator:create
+
+# Start the emulator
+npm run emulator
 ```
 
-The server will start on port 3000.
+6. Start the development servers:
 
-### Start the Client
-
-2. In a new terminal, navigate to the client directory:
 ```bash
-cd dementia-real-talk-client
+# Start everything (server + client) in development mode
+npm run dev
+
+# Or start individual components:
+
+# Start Supabase
+npm run supabase:start
+
+# Start server in development mode
+npm run dev:server
+
+# Start client for development
+npm run start:client
+
+# Android Development
+npm run android        # Starts both emulator and Expo dev build
+npm run android:dev    # Starts Expo dev build only
+npm run android:run    # Builds and runs on device/emulator
+
+# iOS Development
+npm run ios:dev       # Starts Expo dev build
+npm run ios:run       # Builds and runs on simulator
 ```
 
-3. For iOS:
+## Available Scripts
+
+### Development
+- `npm run dev` - Start both server and client in development mode
+- `npm run dev:server` - Start server in development mode
+- `npm run start:client` - Start Expo development server
+
+### Android
+- `npm run android` - Start emulator and Android development build
+- `npm run android:dev` - Start Android development build
+- `npm run android:run` - Build and run on Android device/emulator
+- `npm run emulator` - Start Android emulator
+- `npm run emulator:list` - List available Android emulators
+- `npm run emulator:create` - Create a new Android emulator
+
+### iOS
+- `npm run ios:dev` - Start iOS development build
+- `npm run ios:run` - Build and run on iOS simulator
+
+### Installation
+- `npm run install:all` - Install dependencies for all packages
+- `npm run install:server` - Install server dependencies
+- `npm run install:client` - Install client dependencies
+
+### Supabase
+- `npm run supabase:start` - Start Supabase local development
+- `npm run supabase:stop` - Stop Supabase local development
+- `npm run supabase:reset` - Reset Supabase database
+
+## Features
+
+- Real-time conversations with AI about dementia-related topics
+- Secure authentication via Supabase
+- Vector similarity search for relevant conversation context
+- Voice and text input/output
+- Conversation history tracking
+
+## Development
+
+### Server
+
+The backend server is built with:
+- Express.js
+- Supabase (PostgreSQL + pgvector)
+- OpenAI API
+- Vector embeddings for semantic search
+
+### Client
+
+The mobile app is built with:
+- React Native
+- Supabase JS client
+- OpenAI API integration
+- Real-time audio streaming
+
+## Database Migrations
+
+To apply database migrations:
 ```bash
-# Install pods (first time only)
-cd ios && pod install && cd ..
-
-# Run the app
-npm run ios
-# or if using yarn
-yarn ios
+npm run supabase:reset
 ```
 
-4. For Android:
-```bash
-emulator @Pixel_4a_Edited_API_33
-npx expo run:android
+## Contributing
 
-```
-
-## Using the Application
-
-1. Launch the app on your device/simulator
-2. Press the "Enable" button to start a session
-3. Grant microphone permissions when prompted
-4. Start speaking - your voice will be transcribed automatically
-5. The AI will respond with both voice and text
-6. Use the "Request Response" button to manually trigger AI responses
-7. Press "Stop" to end the session
-
-## Troubleshooting
-
-- If you're using an iOS simulator and don't hear audio, make sure the simulator's audio input/output is properly configured
-- For Android emulators, verify that microphone permissions are granted in the system settings
-- Check the console logs for detailed error messages and debugging information
-
-## Development Notes
-
-- The application uses WebRTC for real-time audio communication
-- Voice Activity Detection (VAD) is enabled by default
-- The model will automatically respond when it detects you've finished speaking
-- The UI displays both transcribed user input and model responses
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the LICENSE file for details.

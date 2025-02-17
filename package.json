@@ -1,0 +1,35 @@
+{
+  "name": "dementia-real-talk",
+  "version": "1.0.0",
+  "description": "A real-time conversation application specialized for discussing dementia-related topics",
+  "private": true,
+  "workspaces": [
+    "dementia-real-talk-server",
+    "dementia-real-talk-client"
+  ],
+  "scripts": {
+    "start:server": "cd dementia-real-talk-server && npm start",
+    "start:client": "cd dementia-real-talk-client && npx expo start",
+    "dev:server": "cd dementia-real-talk-server && npm run dev",
+    "emulator": "emulator -avd Pixel_4a_Edited_API_33",
+    "emulator:list": "emulator -list-avds",
+    "emulator:create": "avdmanager create avd -n Pixel_4a_Edited_API_33 -k 'system-images;android-33;google_apis;x86_64' -d 'pixel'",
+    "android:dev": "cd dementia-real-talk-client && npx expo start --android",
+    "android:run": "cd dementia-real-talk-client && npx expo run:android",
+    "ios:dev": "cd dementia-real-talk-client && npx expo start --ios",
+    "ios:run": "cd dementia-real-talk-client && npx expo run:ios",
+    "install:all": "npm install && npm run install:server && npm run install:client",
+    "install:server": "cd dementia-real-talk-server && npm install",
+    "install:client": "cd dementia-real-talk-client && npm install",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "dev": "concurrently \"npm run dev:server\" \"npm run start:client\"",
+    "android": "concurrently \"npm run emulator\" \"npm run android:dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "author": "",
+  "license": "MIT"
+} 
