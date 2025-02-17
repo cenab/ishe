@@ -1,6 +1,6 @@
-# Dementia Real Talk Client
+# Ayshe Client
 
-React Native mobile application for the Dementia Real Talk platform.
+The client application for Ayshe, a real-time conversation application with your AI companion.
 
 ## Tech Stack
 

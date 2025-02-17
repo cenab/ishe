@@ -1,6 +1,7 @@
 {
-  "name": "dementiarealtalk-react-app",
+  "name": "ayshe-client",
   "version": "1.0.0",
+  "description": "The client application for Ayshe, a real-time conversation application with your AI companion",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

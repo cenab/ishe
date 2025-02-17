@@ -1,6 +1,6 @@
-# Dementia Real Talk
+# Ayshe
 
-A real-time conversation application specialized for discussing dementia-related topics, powered by OpenAI and Supabase.
+A real-time conversation application with Ayshe, your AI companion.
 
 ## Project Structure
 

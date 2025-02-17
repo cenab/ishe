@@ -44,20 +44,79 @@ class SupabaseVectorDatabase {
     await this.initialize();
     try {
       const vector = await this.getEmbedding(text);
-      // Insert the conversation into Supabase.
+      
+      // Ensure metadata is a valid object
+      let cleanMetadata = {};
+      
+      try {
+        // If metadata is a string, try to parse it
+        if (typeof metadata === 'string') {
+          cleanMetadata = JSON.parse(metadata);
+        } else {
+          cleanMetadata = { ...metadata };
+        }
+
+        // Ensure all values are JSON-safe
+        Object.keys(cleanMetadata).forEach(key => {
+          if (cleanMetadata[key] === undefined) {
+            delete cleanMetadata[key];
+          } else if (typeof cleanMetadata[key] === 'object') {
+            cleanMetadata[key] = JSON.stringify(cleanMetadata[key]);
+          } else {
+            cleanMetadata[key] = String(cleanMetadata[key]);
+          }
+        });
+
+      } catch (e) {
+        console.error('Error formatting metadata:', e);
+        cleanMetadata = {};
+      }
+
+      // Add timestamp to metadata
+      cleanMetadata.timestamp = new Date().toISOString();
+
+      console.log('Formatted metadata:', cleanMetadata);
+
+      // Check if this is a response to a previous message
+      if (cleanMetadata.responseId) {
+        // Update the existing conversation with the response
+        const { data: existingData, error: existingError } = await this.supabase
+          .from(this.tableName)
+          .select('*')
+          .eq('metadata->>responseId', cleanMetadata.responseId)
+          .single();
+
+        if (existingError && existingError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+          throw existingError;
+        }
+
+        if (existingData) {
+          console.log('Skipping duplicate response:', cleanMetadata.responseId);
+          return; // Skip adding duplicate response
+        }
+      }
+
+      // Insert the new conversation
       const { data, error } = await this.supabase
         .from(this.tableName)
         .insert([
           {
-            vector, // pgvector column; ensure dimension is 384
+            vector,
             text,
             userId,
             created_at: new Date().toISOString(),
-            metadata // stored as JSON
+            metadata: cleanMetadata
           }
         ]);
-      if (error) throw error;
-      console.log('Conversation added successfully');
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+      console.log('Conversation added successfully:', { 
+        text: text.substring(0, 50) + '...', 
+        metadata: cleanMetadata 
+      });
     } catch (error) {
       console.error('Error adding conversation:', error);
       throw error;
@@ -86,15 +145,14 @@ class SupabaseVectorDatabase {
     }
   }
 
-  async getUserConversations(userId, limit = 10) {
+  async getUserConversations(userId) {
     await this.initialize();
     try {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .select('*')
         .eq('userId', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .order('created_at', { ascending: false });
       if (error) throw error;
       // Reverse the order to chronological
       const sorted = data.reverse();

@@ -1,7 +1,7 @@
 {
-  "name": "dementia-real-talk",
+  "name": "ayshe",
   "version": "1.0.0",
-  "description": "A real-time conversation application specialized for discussing dementia-related topics",
+  "description": "A real-time conversation application with Ayshe, your AI companion",
   "private": true,
   "workspaces": [
     "dementia-real-talk-server",
@@ -25,7 +25,7 @@
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
     "dev": "concurrently \"npm run dev:server\" \"npm run start:client\"",
-    "android": "concurrently \"npm run emulator\" \"npm run android:dev\""
+    "android": "npm run emulator && npm run start:server && npm run android:dev"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

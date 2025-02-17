@@ -1,5 +1,17 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, Button, StyleSheet, Platform, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  TextInput,
+  ScrollView,
+  SafeAreaView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Image,
+} from 'react-native';
 import {
   RTCPeerConnection,
   mediaDevices,
@@ -9,6 +21,7 @@ import {
 } from 'react-native-webrtc';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { Ionicons } from '@expo/vector-icons';
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
@@ -17,24 +30,35 @@ const API_URL = Platform.select({
   default: 'http://localhost:3000',
 });
 
+// Add a new type for messages
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: Date;
+};
+
 const MainApp = () => {
   const { user, session, signOut } = useAuth();
   // State to track whether the session is started and to hold the remote stream
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [transcript, setTranscript] = useState<string>('');
-  const [modelResponse, setModelResponse] = useState<string>('');
-  const [isModelSpeaking, setIsModelSpeaking] = useState<boolean>(false);
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
+  const [isModelSpeaking, setIsModelSpeaking] = useState<boolean>(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState<boolean>(false);
   const [userTranscript, setUserTranscript] = useState<string>('');
-  const [textInput, setTextInput] = useState<string>('');
   const [currentResponseId, setCurrentResponseId] = useState<string | null>(null);
+  // Add new state for messages
+  const [messages, setMessages] = useState<Message[]>([]);
+  // Add new state for temporary user input
+  const [tempUserInput, setTempUserInput] = useState<string[]>([]);
   
   // Refs to store the peer connection and local stream so they can be stopped later
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const dataChannelRef = useRef<any>(null);
+  // Add ref for auto-scrolling
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Function to send a response request to the model
   const sendResponseRequest = () => {
@@ -54,33 +78,10 @@ const MainApp = () => {
         },
       };
       dataChannelRef.current.send(JSON.stringify(responseCreate));
-      console.log('Sent response request to model:', responseCreate);
+      //console.log('Sent response request to model:', responseCreate);
       setUserTranscript(''); // Clear user transcript for next interaction
     } else {
-      console.log('Data channel not ready or no user input');
-    }
-  };
-
-  // Function to send text input as a message
-  const sendTextInput = () => {
-    if (dataChannelRef.current?.readyState === 'open' && textInput.trim()) {
-      const responseCreate = {
-        type: "response.create",
-        response: {
-          modalities: ["audio", "text"],
-          input: [{
-            type: "message",
-            role: "user",
-            content: [{
-              type: "input_text",
-              text: textInput.trim()
-            }]
-          }]
-        },
-      };
-      dataChannelRef.current.send(JSON.stringify(responseCreate));
-      console.log('Sent text input to model:', responseCreate);
-      setTextInput(''); // Clear text input
+      //console.log('Data channel not ready or no user input');
     }
   };
 
@@ -103,7 +104,7 @@ const MainApp = () => {
         throw new Error('Failed to store conversation');
       }
     } catch (error) {
-      console.error('Error storing conversation:', error);
+      //console.error('Error storing conversation:', error);
     }
   };
 
@@ -113,93 +114,129 @@ const MainApp = () => {
       const message = JSON.parse(event.data);
       console.log('DataChannel message:', message);
 
-      // If this message is from a different response than our current one, ignore it
       if (message.response_id && currentResponseId && message.response_id !== currentResponseId) {
-        console.log('Ignoring message from old response:', message.response_id);
         return;
       }
 
       switch (message.type) {
+        case 'conversation.item.input_audio_transcription.completed':
+          // Add the transcript to temporary input array
+          setTempUserInput(prev => [...prev, message.transcript.trim()]);
+          break;
+
         case 'response.created':
-          console.log('Response created:', message.response.id);
+          // When a response is created, it means the user has finished speaking
+          // Join all temporary inputs and create a single message
+          if (tempUserInput.length > 0) {
+            const completeUserInput = tempUserInput.join(' ');
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              role: 'user',
+              text: completeUserInput,
+              timestamp: new Date()
+            }]);
+            // Store user's input immediately
+            storeConversation(completeUserInput, {
+              type: 'user_input',
+              timestamp: new Date().toISOString()
+            });
+            setTempUserInput([]); // Clear temporary input
+          }
           setCurrentResponseId(message.response.id);
           break;
+
         case 'response.done':
           if (message.response.id === currentResponseId) {
             if (message.response.status === 'failed') {
               console.error('Response failed:', message.response.status_details);
             } else {
-              console.log('Response completed:', message.response.id);
-              // Store the completed conversation
-              if (transcript) {
-                storeConversation(transcript, {
+              // Store assistant's response
+              if (currentTranscript) {
+                storeConversation(currentTranscript, {
+                  type: 'assistant_response',
                   responseId: message.response.id,
-                  userInput: userTranscript
+                  timestamp: new Date().toISOString()
                 });
               }
             }
             setCurrentResponseId(null);
           }
           break;
+
         case 'transcript':
-          // This is the user's speech transcript
           setUserTranscript(message.text);
           setIsUserSpeaking(true);
-          // Store user's input
-          storeConversation(message.text, { type: 'user_input' });
           break;
+
         case 'response.audio_transcript.delta':
           if (!currentResponseId || message.response_id === currentResponseId) {
             setCurrentTranscript(prev => prev + (message.delta || ''));
-            // Clear previous transcript when getting new deltas
-            setTranscript('');
           }
           break;
+
         case 'response.audio_transcript.done':
           if (!currentResponseId || message.response_id === currentResponseId) {
-            // Store the final transcript
-            setTranscript(message.transcript);
+            const assistantMessage: Message = {
+              id: message.response_id || Date.now().toString(),
+              role: 'assistant',
+              text: message.transcript,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, assistantMessage]);
+            // Store assistant's complete response
+            storeConversation(message.transcript, {
+              type: 'assistant_response',
+              responseId: message.response_id,
+              timestamp: new Date().toISOString()
+            });
             setCurrentTranscript('');
             setIsUserSpeaking(false);
           }
           break;
+
         case 'speech.started':
           if (!currentResponseId || message.response_id === currentResponseId) {
-            console.log('Model started speaking');
+            //console.log('Model started speaking');
             setIsModelSpeaking(true);
             // Clear previous transcript when model starts speaking
             setCurrentTranscript('');
-            setTranscript('');
           }
           break;
+
         case 'speech.ended':
           if (!currentResponseId || message.response_id === currentResponseId) {
-            console.log('Model finished speaking');
+            //console.log('Model finished speaking');
             setIsModelSpeaking(false);
           }
           break;
+
         case 'session.error':
-          console.error('Session error:', message.error);
+          //console.error('Session error:', message.error);
           break;
+
         case 'error':
-          console.error('Error from server:', message.error);
+          //console.error('Error from server:', message.error);
           break;
+
         case 'text':
-          setModelResponse(message.text);
+          // This case is not used in the current implementation
           break;
+
         case 'session.created':
         case 'session.updated':
-          console.log(`Session ${message.type}:`, message.session.id);
+          //console.log(`Session ${message.type}:`, message.session.id);
           break;
+
         case 'response.audio.done':
         case 'response.content_part.done':
         case 'response.output_item.done':
         case 'output_audio_buffer.stopped':
           // These events indicate different stages of response completion
-          console.log(`Received ${message.type} event`);
+          //console.log(`Received ${message.type} event`);
           break;
+
         default:
-          console.log('Unhandled message type:', message.type);
+          //console.log('Unhandled message type:', message.type);
       }
     } catch (error) {
       console.error('Error parsing message:', error);
@@ -213,7 +250,7 @@ const MainApp = () => {
         throw new Error('No access token available. Please log in again.');
       }
 
-      console.log('Requesting session token...');
+      //console.log('Requesting session token...');
       // Get an ephemeral key from your server
       const tokenResponse = await fetch(`${API_URL}/session`, {
         headers: {
@@ -224,17 +261,17 @@ const MainApp = () => {
       
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json();
-        console.error('Session token error:', errorData);
+        //console.error('Session token error:', errorData);
         throw new Error(`Failed to get session token: ${tokenResponse.status} - ${JSON.stringify(errorData)}`);
       }
       
       const data = await tokenResponse.json();
       if (!data.client_secret?.value) {
-        console.error('Invalid response data:', data);
+        //console.error('Invalid response data:', data);
         throw new Error('Session response missing client secret value');
       }
 
-      console.log('Successfully obtained session token');
+      //console.log('Successfully obtained session token');
       const EPHEMERAL_KEY = data.client_secret.value;
 
       // Create a new peer connection with STUN servers
@@ -250,7 +287,7 @@ const MainApp = () => {
       dataChannelRef.current = dc;
 
       dc.addEventListener('open', () => {
-        console.log('Data channel opened');
+        //console.log('Data channel opened');
         // Send initial session update to configure audio
         if (dc.readyState === 'open') {
           const sessionUpdate = {
@@ -273,7 +310,7 @@ const MainApp = () => {
             }
           };
           dc.send(JSON.stringify(sessionUpdate));
-          console.log('Sent session update:', sessionUpdate);
+          //console.log('Sent session update:', sessionUpdate);
         }
       });
 
@@ -282,7 +319,7 @@ const MainApp = () => {
       // Handle remote stream: store it in state when received
       pc.addEventListener('track', (event: any) => {
         if (event.streams && event.streams[0]) {
-          console.log('Remote stream received:', event.streams[0]);
+          //console.log('Remote stream received:', event.streams[0]);
           
           // Stop any existing remote stream
           if (remoteStream) {
@@ -303,7 +340,7 @@ const MainApp = () => {
             const track = audioTracks[0];
             track.enabled = true;
             newStream.addTrack(track);
-            console.log('Added single audio track to new stream:', track.label);
+            //console.log('Added single audio track to new stream:', track.label);
           }
           
           setRemoteStream(newStream);
@@ -312,7 +349,7 @@ const MainApp = () => {
 
       // Get local audio from the device's microphone
       try {
-        console.log('Requesting microphone access...');
+        //console.log('Requesting microphone access...');
         const constraints = {
           audio: {
             sampleRate: 16000,
@@ -334,7 +371,7 @@ const MainApp = () => {
         }
         
         const localStream = await mediaDevices.getUserMedia(constraints as any);
-        console.log('Microphone access granted');
+        //console.log('Microphone access granted');
         
         localStreamRef.current = localStream;
         
@@ -343,7 +380,7 @@ const MainApp = () => {
         if (audioTracks.length > 0) {
           audioTracks[0].enabled = true;
           pc.addTrack(audioTracks[0], localStream);
-          console.log('Added audio track to peer connection:', audioTracks[0].label);
+          //console.log('Added audio track to peer connection:', audioTracks[0].label);
           
           // Disable any additional tracks
           audioTracks.slice(1).forEach(track => {
@@ -362,9 +399,9 @@ const MainApp = () => {
           }
         };
         dc.send(JSON.stringify(audioBuffer));
-        console.log('Sent initial audio buffer config:', audioBuffer);
+        //console.log('Sent initial audio buffer config:', audioBuffer);
       } catch (error) {
-        console.error('Error accessing microphone:', error);
+        //console.error('Error accessing microphone:', error);
         return; // Exit if we can't get microphone access
       }
 
@@ -401,14 +438,14 @@ const MainApp = () => {
       // Add ICE candidate handler
       pc.addEventListener('icecandidate', (event: any) => {
         if (event.candidate) {
-          console.log('New ICE candidate:', event.candidate);
+          //console.log('New ICE candidate:', event.candidate);
         }
       });
 
       // Update state to indicate that the session is started
       setIsStarted(true);
     } catch (error) {
-      console.error('Error during initialization:', error);
+      //console.error('Error during initialization:', error);
       stop(); // Clean up if initialization fails
     }
   }
@@ -450,86 +487,105 @@ const MainApp = () => {
     // Reset all states
     setIsStarted(false);
     setCurrentTranscript('');
-    setTranscript('');
-    setModelResponse('');
-    setIsModelSpeaking(false);
-    setIsUserSpeaking(false);
     setUserTranscript('');
     setCurrentResponseId(null);
+    setTempUserInput([]); // Clear temporary input when stopping
+    setMessages([]); // Clear messages when stopping
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Dementia Real Talk</Text>
-        <Button title="Sign Out" onPress={signOut} />
-      </View>
-      <Text style={styles.title}>Dementia Real Talk React App</Text>
-      {isStarted ? (
-        <Button title="Stop" onPress={stop} color="#D9534F" />
-      ) : (
-        <Button title="Enable" onPress={init} color="#5CB85C" />
-      )}
-      <Text style={styles.status}>
-        {isStarted ? (
-          isUserSpeaking ? 'Listening to you...' : 
-          isModelSpeaking ? 'Assistant is speaking...' : 
-          'Ready for your input'
-        ) : 'Session Stopped'}
-      </Text>
-      {remoteStream ? (
-        <View style={styles.streamContainer}>
-          <Text>Voice connection established</Text>
-          {remoteStream.getAudioTracks().length > 0 && (
-            <RTCView
-              streamURL={remoteStream.toURL()}
-              style={styles.rtcView}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingView}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Image 
+              source={require('./assets/ayshe.png')}
+              style={styles.logo}
+              resizeMode="cover"
             />
-          )}
+            <Text style={styles.headerTitle}>Ayshe</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.signOutButton} 
+            onPress={signOut}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.conversationContainer}
+          contentContainerStyle={styles.conversationContent}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((message) => (
+            <View key={message.id} style={styles.messageContainer}>
+              <View style={[
+                message.role === 'assistant' ? styles.modelMessage : styles.userMessage,
+              ]}>
+                <Text style={[
+                  styles.messageText,
+                  message.role === 'user' && styles.userMessageText
+                ]}>{message.text}</Text>
+                <Text style={styles.timestampText}>
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </View>
+          ))}
           
-          {/* Add text input for emulator testing */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              value={textInput}
-              onChangeText={setTextInput}
-              placeholder="Type your message here..."
-              multiline
-              returnKeyType="send"
-              onSubmitEditing={sendTextInput}
-              editable={!isModelSpeaking}
-            />
-            <Button
-              title="Send"
-              onPress={sendTextInput}
-              disabled={isModelSpeaking || !textInput.trim()}
-              color="#5CB85C"
-            />
+          {currentTranscript && (
+            <View style={styles.messageContainer}>
+              <View style={[styles.modelMessage, styles.currentMessage]}>
+                <Text style={styles.messageText}>{currentTranscript}</Text>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={styles.controlsContainer}>
+          <View style={styles.statusIndicators}>
+            {isModelSpeaking && (
+              <View style={styles.statusItem}>
+                <ActivityIndicator color="#007AFF" />
+                <Text style={styles.statusText}>AI Speaking</Text>
+              </View>
+            )}
+            {isUserSpeaking && (
+              <View style={styles.statusItem}>
+                <View style={styles.recordingIndicator} />
+                <Text style={styles.statusText}>Recording</Text>
+              </View>
+            )}
           </View>
 
-          {userTranscript && (
-            <View style={styles.transcriptContainer}>
-              <Text style={styles.label}>Your Message:</Text>
-              <Text style={styles.text}>{userTranscript}</Text>
-            </View>
-          )}
-          {/* Show either current transcript or previous response, not both */}
-          {currentTranscript ? (
-            <View style={styles.transcriptContainer}>
-              <Text style={styles.label}>Assistant Speaking:</Text>
-              <Text style={styles.text}>{currentTranscript}</Text>
-            </View>
-          ) : transcript ? (
-            <View style={styles.transcriptContainer}>
-              <Text style={styles.label}>Assistant's Response:</Text>
-              <Text style={styles.text}>{transcript}</Text>
-            </View>
-          ) : null}
+          <TouchableOpacity
+            style={[
+              styles.startButton,
+              isStarted && styles.stopButton
+            ]}
+            onPress={() => {
+              if (isStarted) {
+                stop();
+              } else {
+                init();
+              }
+            }}
+          >
+            <Text style={[
+              styles.startButtonText,
+              isStarted && styles.stopButtonText
+            ]}>
+              {isStarted ? 'Stop Conversation' : 'Start Conversation'}
+            </Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <Text>Establishing connection...</Text>
-      )}
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
@@ -558,66 +614,125 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F2F2F7',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginRight: 10,
-  },
-  status: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  streamContainer: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  rtcView: {
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
-  transcriptContainer: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    width: '100%',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  text: {
-    fontSize: 14,
-    color: '#333',
-  },
-  inputContainer: {
-    width: '100%',
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 10,
   },
-  textInput: {
+  logo: {
+    width: 65,
+    height: 65,
+    borderRadius: 33,
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  signOutButton: {
+    padding: 8,
+  },
+  conversationContainer: {
     flex: 1,
+  },
+  conversationContent: {
+    padding: 16,
+  },
+  messageContainer: {
+    marginVertical: 8,
+    flexDirection: 'row',
+  },
+  modelMessage: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 16,
+    maxWidth: '80%',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginRight: 10,
-    backgroundColor: '#FFF',
-    maxHeight: 100,
+    borderColor: '#E5E5EA',
+  },
+  userMessage: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 16,
+    maxWidth: '80%',
+    marginLeft: 'auto',
+  },
+  currentMessage: {
+    backgroundColor: '#F2F2F7',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#000000',
+  },
+  userMessageText: {
+    color: '#FFFFFF',
+  },
+  timestampText: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  controlsContainer: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  statusIndicators: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  statusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+    backgroundColor: '#F2F2F7',
+    padding: 6,
+    borderRadius: 12,
+  },
+  recordingIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#666666',
+    marginLeft: 6,
+  },
+  startButton: {
+    backgroundColor: '#007AFF',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  stopButton: {
+    backgroundColor: '#FF3B30',
+  },
+  startButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stopButtonText: {
+    color: '#FFFFFF',
   },
 });

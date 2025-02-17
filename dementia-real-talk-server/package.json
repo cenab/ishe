@@ -1,7 +1,7 @@
 {
-  "name": "dementia-real-talk-server",
+  "name": "ayshe-server",
   "version": "1.0.0",
-  "description": "Server for Dementia Real Talk application",
+  "description": "The server application for Ayshe, a real-time conversation application with your AI companion",
   "type": "module",
   "main": "server.js",
   "scripts": {

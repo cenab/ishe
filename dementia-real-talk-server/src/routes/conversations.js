@@ -34,8 +34,7 @@ router.get('/search', verifySupabaseToken, async (req, res) => {
 router.get('/user', verifySupabaseToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { limit } = req.query;
-    const conversations = await vectorDb.getUserConversations(userId, parseInt(limit) || 10);
+    const conversations = await vectorDb.getUserConversations(userId);
     res.json(conversations);
   } catch (error) {
     console.error('Error getting user conversations:', error);

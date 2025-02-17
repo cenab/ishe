@@ -1,4 +1,6 @@
-# Dementia Real Talk Server
+# Ayshe Server
+
+The server application for Ayshe, a real-time conversation application with your AI companion.
 
 Backend server for the Dementia Real Talk application.
 
