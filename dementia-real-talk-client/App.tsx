@@ -609,7 +609,7 @@ const MainApp = () => {
               style={styles.logo}
               resizeMode="cover"
             />
-            <Text style={styles.headerTitle}>Ayshe</Text>
+            <Text style={styles.headerTitle}>iShe</Text>
           </View>
           <TouchableOpacity 
             style={styles.signOutButton} 

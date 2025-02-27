@@ -72,7 +72,7 @@ export const LoginScreen = () => {
               style={styles.logo}
               resizeMode="cover"
             />
-            <Text style={styles.title}>Hi, I'm Ayshe</Text>
+            <Text style={styles.title}>Hi, I'm iShe</Text>
             <Text style={styles.subtitle}>{isSignUp ? 'Create an account to talk to me' : 'Sign in to talk to me'}</Text>
           </View>
 
