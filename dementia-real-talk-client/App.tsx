@@ -19,6 +19,8 @@ import {
   MediaStreamTrack,
   RTCView,
 } from 'react-native-webrtc';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,10 +50,14 @@ const MainApp = () => {
   const [isUserSpeaking, setIsUserSpeaking] = useState<boolean>(false);
   const [userTranscript, setUserTranscript] = useState<string>('');
   const [currentResponseId, setCurrentResponseId] = useState<string | null>(null);
-  // Add new state for messages
   const [messages, setMessages] = useState<Message[]>([]);
   // Add new state for temporary user input
   const [tempUserInput, setTempUserInput] = useState<string[]>([]);
+  
+  // Add new state and ref for audio recording
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const recordingStartTime = useRef<number | null>(null);
   
   // Refs to store the peer connection and local stream so they can be stopped later
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -105,6 +111,97 @@ const MainApp = () => {
       }
     } catch (error) {
       //console.error('Error storing conversation:', error);
+    }
+  };
+
+  // Function to start recording
+  const startRecording = async () => {
+    try {
+      // Request permissions
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        console.error('Permission to record was denied');
+        return;
+      }
+
+      // Set audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // Start recording
+      const newRecording = new Audio.Recording();
+      await newRecording.prepareToRecordAsync({
+        android: {
+          extension: '.wav',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.wav',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        web: {
+          mimeType: 'audio/wav',
+          bitsPerSecond: 128000,
+        },
+      });
+
+      await newRecording.startAsync();
+      setRecording(newRecording);
+      setIsRecording(true);
+      recordingStartTime.current = Date.now();
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+    }
+  };
+
+  // Function to stop recording and upload
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      const duration = Date.now() - (recordingStartTime.current || 0);
+      
+      if (uri) {
+        // Create form data for upload
+        const formData = new FormData();
+        formData.append('audio', {
+          uri,
+          type: 'audio/wav',
+          name: 'recording.wav',
+        } as any);
+        formData.append('duration', duration.toString());
+        formData.append('timestamp', new Date().toISOString());
+
+        // Upload the recording
+        const response = await fetch(`${API_URL}/api/audio/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to upload recording');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+    } finally {
+      setRecording(null);
+      setIsRecording(false);
+      recordingStartTime.current = null;
     }
   };
 
@@ -249,6 +346,9 @@ const MainApp = () => {
       if (!session?.access_token) {
         throw new Error('No access token available. Please log in again.');
       }
+
+      // Start recording
+      await startRecording();
 
       //console.log('Requesting session token...');
       // Get an ephemeral key from your server
@@ -452,6 +552,9 @@ const MainApp = () => {
 
   // Function to stop the session
   async function stop() {
+    // Stop recording
+    await stopRecording();
+    
     // Stop and remove all remote stream tracks
     if (remoteStream) {
       const tracks = remoteStream.getTracks();

@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { expressjwt as jwt } from 'express-jwt';
 import vectorDb from './src/utils/supabaseVectorDb.js';
 import conversationsRouter from './src/routes/conversations.js';
+import audioRouter from './src/routes/audio.js';
 import { verifySupabaseToken } from './src/middleware/auth.js';
 
 const app = express();
@@ -40,6 +41,7 @@ vectorDb.initialize().catch(console.error);
 
 // Routes
 app.use('/api/conversations', conversationsRouter);
+app.use('/api/audio', audioRouter);
 
 // Protected route example
 app.get('/api/protected', verifySupabaseToken, (req, res) => {
