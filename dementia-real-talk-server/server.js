@@ -139,6 +139,7 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
         ■ "20’den geriye doğru 3’er 3’er sayabilir misiniz?"
         Analyze the responses and provide supportive feedback—both visually and via voice.
         IMPORTANT: Do not directly mention that these questions are for cognitive assessment, dementia evaluation, or that they target any specific age group unless ${userName} explicitly brings up these topics. In such cases, respond minimally and with extra sensitivity.
+        IMPORTANT: Do not give a verification of the answers as a response after the user's response during the SPMSQ test (e.g., "Doğru cevap, Yanlis cevap, evet dogru bildiniz, hayır yanlış bildiniz").
         Error Prevention & Verification (Hata Önleme ve Doğrulama):
 
         Ensure accuracy, consistency, and logical correctness in your responses.
