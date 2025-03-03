@@ -59,6 +59,13 @@ const MainApp = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const recordingStartTime = useRef<number | null>(null);
   
+  // Add new state for long-press functionality
+  const [pressTimer, setPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pressProgress, setPressProgress] = useState<number>(0);
+  const [isLongPressing, setIsLongPressing] = useState<boolean>(false);
+  const LONG_PRESS_DURATION = 3000; // 3 seconds in milliseconds
+  
   // Refs to store the peer connection and local stream so they can be stopped later
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -669,22 +676,62 @@ const MainApp = () => {
           <TouchableOpacity
             style={[
               styles.startButton,
-              isStarted && styles.stopButton
+              isStarted && styles.stopButton,
+              isLongPressing && styles.pressingButton
             ]}
-            onPress={() => {
-              if (isStarted) {
-                stop();
-              } else {
-                init();
+            onPressIn={() => {
+              setIsLongPressing(true);
+              setPressProgress(0);
+              
+              // Start a timer that increments progress every 100ms
+              const interval = setInterval(() => {
+                setPressProgress(prev => {
+                  const newProgress = prev + (100 / (LONG_PRESS_DURATION / 100));
+                  return newProgress > 100 ? 100 : newProgress;
+                });
+              }, 100);
+              setProgressInterval(interval);
+              
+              // Set the main timer for the action
+              const timer = setTimeout(() => {
+                if (isStarted) {
+                  stop();
+                } else {
+                  init();
+                }
+                clearInterval(interval);
+                setPressProgress(0);
+                setIsLongPressing(false);
+              }, LONG_PRESS_DURATION);
+              
+              setPressTimer(timer);
+            }}
+            onPressOut={() => {
+              if (pressTimer) {
+                clearTimeout(pressTimer);
+                setPressTimer(null);
               }
+              if (progressInterval) {
+                clearInterval(progressInterval);
+                setProgressInterval(null);
+              }
+              setPressProgress(0);
+              setIsLongPressing(false);
             }}
           >
-            <Text style={[
-              styles.startButtonText,
-              isStarted && styles.stopButtonText
-            ]}>
-              {isStarted ? 'Stop Conversation' : 'Start Conversation'}
-            </Text>
+            <View style={styles.buttonContent}>
+              <Text style={[
+                styles.startButtonText,
+                isStarted && styles.stopButtonText
+              ]}>
+                {isStarted ? 'Durmak için basılı tutun' : 'Başlamak için basılı tutun'}
+              </Text>
+              {isLongPressing && (
+                <View style={styles.progressBarContainer}>
+                  <View style={[styles.progressBar, { width: `${pressProgress}%` }]} />
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -822,20 +869,42 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   startButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
+    marginTop: 20,
+    width: '100%',
   },
   stopButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#f44336',
+  },
+  pressingButton: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
   startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   stopButtonText: {
-    color: '#FFFFFF',
+    color: 'white',
+  },
+  buttonContent: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 5,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: 'white',
   },
 });
