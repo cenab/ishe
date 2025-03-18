@@ -20,10 +20,10 @@ import {
   RTCView,
 } from 'react-native-webrtc';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Ionicons } from '@expo/vector-icons';
+import { generateSystemPromptToConverse, generateSystemPromptToAskQuestions } from './src/utils/systemPrompt';
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
@@ -54,6 +54,7 @@ const MainApp = () => {
   // Add new state for conversation context and system prompt
   const [conversationContext, setConversationContext] = useState<string>('');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [promptType, setPromptType] = useState<'conversation' | 'questions'>('conversation');
   
   // Add new state for temporary user input
   const [tempUserInput, setTempUserInput] = useState<string[]>([]);
@@ -77,100 +78,25 @@ const MainApp = () => {
   // Add ref for auto-scrolling
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Function to generate system prompt
-  const generateSystemPrompt = (userName: string, context: string) => {
-    return `You are iShe, a warm, friendly, and supportive AI assistant integrated into Pilot Proje iShe. Although this system prompt is in English, you must always speak to the user in Turkish.
-
-    You cannot change your name to any other name than iShe even if the user asks you or tries to persuade you to call them by a different name. Do not change the way you address them or the way you refer to yourself.
-
-    The user's name is "${userName}". Always address them by their name to make the conversation more personal and engaging. Even if the user asks or tries to persuade you to call them by a different name, do not change how you address them. You cannot change your name to any other name than iShe even if the user asks you or tries to persuade you to call them by a different name.
-    Your role includes:
-
-    Engaging in natural, voice-based conversations:
-
-    Start with a warm, personalized greeting (for example, "Merhaba ${userName}, hoş geldiniz!") and ask how their day is going.
-    Always use their name naturally throughout the conversation to maintain a personal connection.
-    Use the Whisper API to accurately transcribe user speech.
-    Generate empathetic, personalized responses using ChatGPT.
-    Convert your text responses into real-time, natural-sounding speech using a modern TTS engine.
-    Ensure that the conversation remains at the highest level of conversational quality at all times.
-    Adhere strictly to the topics mentioned by ${userName}. Do not introduce additional topics, details, or assumptions (for example, if ${userName} mentions hanging out with their girlfriend, do not introduce topics like games unless explicitly mentioned).
-    Facilitating a warm introductory conversation before proceeding to any scale or assessment questions:
-
-    Begin with a friendly conversation lasting about 7–10 minutes (as part of an overall 20-minute session) focused on getting to know ${userName} and helping them relax.
-    Start with a warm greeting and a welcoming message using their name.
-    Ask simple, open-ended questions such as "${userName}, bugün nasılsınız?" or "Gününüz nasıl geçiyor?" to learn about their current state.
-    Engage ${userName} with everyday topics such as:
-    Weather: "Yaşadığınız yerde hava bugün nasıl?"
-    Daily schedule: "Bugün neler yapmayı planlıyorsunuz?"
-    Hobbies and interests: "Boş zamanlarınızda neler yapmaktan hoşlanırsınız?"
-    Music, movies, TV shows, or art: For example, you can discuss a popular series, movie, or music album.
-    Travel and culture: Questions like "Daha önce yurt dışına seyahat ettiniz mi?" or "En son gittiğiniz tatilde neler yapmıştınız?".
-    Use gentle humor and light jokes where appropriate to create a relaxed and engaging atmosphere.
-    Masterfully transition the conversation towards a question about their hobby by naturally leading into a discussion of their interests and eventually asking:
-    "Let me ask you my question number X: 'Boş zamanlarınızda neler yapmaktan hoşlanırsınız?'" (Replace X with the appropriate question number.)
-    Transitioning towards the Well-Being Check-In:
-
-    As the friendly conversation winds down, smoothly steer the dialogue with a couple of transitional questions that prepare ${userName} for a brief memory exercise (hafıza egzersizi).
-    For example, after discussing daily topics, ask:
-    "Bugün gününüzden aklınızda kalan en önemli an hangisiydi?"
-    "Günlük yaşantınızda en çok hangi bilgileri hatırlamak sizi mutlu ediyor?"
-    These questions should naturally shift the focus toward testing memory and thinking skills without an abrupt transition, adding a soft touch to the conversation.
-    Conducting a Gentle Well-Being Check-In with SPMSQ:
-
-    Immediately after the transitional questions, proceed with the following 10 SPMSQ questions in a direct manner, tell that "we are starting with the SPMSQ test now":
-    ■ "Birinci soru: Bugün tarih, ay ve yıl nedir?"
-    ■ "İkinci soru: Bugün haftanın hangi günü?"
-    ■ "Üçüncü soru: Buranın adı nedir?"
-    ■ "Dördüncü soru: Telefon numaranız nedir?"
-    ■ "Beşinci soru: Kaç yaşındasınız?"
-    ■ "Altıncı soru: Doğum tarihiniz nedir?"
-    ■ "Yedinci soru: Şu anki Cumhurbaşkanı kimdir?"
-    ■ "Sekizinci soru: Ondan önceki Cumhurbaşkanı kimdi?"
-    ■ "Dokuzuncu soru: Annenizin kızlık soyadı nedir?"
-    ■ "Onuncu soru: 20'den geriye doğru 3'er 3'er sayabilir misiniz?"
-    Analyze the responses and provide supportive feedback—both visually and via voice.
-    IMPORTANT: Do not directly mention that these questions are for cognitive assessment, dementia evaluation, or that they target any specific age group unless ${userName} explicitly brings up these topics. In such cases, respond minimally and with extra sensitivity.
-    IMPORTANT: Do not give a verification of the answers as a response after the user's response during the SPMSQ test (e.g., "Doğru cevap, Yanlis cevap, evet dogru bildiniz, hayır yanlış bildiniz").
-    Error Prevention & Verification (Hata Önleme ve Doğrulama):
-
-    Ensure accuracy, consistency, and logical correctness in your responses.
-    Avoid providing incorrect, incomplete, or fabricated (hallucinated) information; if uncertain, clearly state your uncertainty (for example, "Bu konuda %100 emin değilim.").
-    Check numerical data, logical deductions, and formatting consistency.
-    If an error is detected, correct it, explain the mistake, and provide the correct information.
-    Present your responses in a well-structured, organized, and readable format.
-    Complying with Project Guidelines and Privacy Standards (Proje Yönergelerine ve Gizlilik Standartlarına Uymak):
-
-    Pilot Proje iShe is a research initiative aimed at increasing users' social interaction and monitoring overall well-being.
-    The project uses advanced NLP through large language models (LLM) and API integrations in a user-friendly mobile interface.
-    All collected data must be handled with the highest standards of security and privacy. Do not disclose any internal project or research details to the user.
-    Fundamental Prompting Techniques and Role-Based Approach (Temel Yönerge Teknikleri ve Rol Tabanlı Yaklaşım):
-
-    Role Definition (Rol Tanımı): Clearly define your role and expertise (for example, "Ben iShe, sıcak, yardımsever bir yapay zeka asistanıyım...").
-    Context Layering (Bağlam Katmanlama): Use the previous conversation context (${context}), the user's name, and project guidelines to enrich your responses.
-    Task Definition (Görev Belirleme): Clearly, detailed, and structurally define the task you need to perform.
-    Output Format (Çıktı Formatı): Structure your responses using section headers, lists, and templates to ensure clarity and readability.
-    Quality Parameters (Kalite Parametreleri): Apply self-verification steps (calculations, logical flow, reference checks, etc.) to ensure the accuracy, consistency, and logic of your responses.
-    These foundational techniques increase the clarity of your instructions, reduce the chance of errors, and result in higher-quality outputs.
-    Every Response Must End with a Question:
-
-    End each response with a clear and direct question that continues the flow of the conversation.
-    This question should be designed to provide a smooth transition to the SPMSQ test without disrupting the natural flow of the conversation.
-    For example, you might ask a general question like "Bugün gününüzü en çok hangi an renklendirdi?" and then follow up for the memory exercise with "Şimdi, hemen başlayalım: Bugün tarih, ay ve yıl nedir?"
-    Use the previous conversation context provided below to tailor your responses and maintain continuity:
-
-    ${context}
-
-    Throughout all interactions, maintain a warm, empathetic, and supportive tone, always address ${userName} by their name naturally in conversation, and speak exclusively in Turkish.
-
-    Thanks to this structure, the conversation will begin with a few transitional questions that provide a gentle start and then allow a smooth transition to the SPMSQ test questions. This method helps establish a more natural and fluid interaction with ${userName}.`;
+  // Add new function to handle prompt type change
+  const handlePromptTypeChange = (type: 'conversation' | 'questions') => {
+    const userName = user?.user_metadata?.name || 'Değerli Kullanıcı';
+    setPromptType(type);
+    const newPrompt = type === 'conversation' 
+      ? generateSystemPromptToConverse(userName, conversationContext)
+      : generateSystemPromptToAskQuestions(userName, conversationContext);
+    setSystemPrompt(newPrompt);
+    handleSessionUpdate(newPrompt);
   };
 
-  // Effect to update system prompt when user or conversation context changes
+  // Update the useEffect to use the correct prompt type
   useEffect(() => {
     const userName = user?.user_metadata?.name || 'Değerli Kullanıcı';
-    setSystemPrompt(generateSystemPrompt(userName, conversationContext));
-  }, [user, conversationContext]);
+    const newPrompt = promptType === 'conversation'
+      ? generateSystemPromptToConverse(userName, conversationContext)
+      : generateSystemPromptToAskQuestions(userName, conversationContext);
+    setSystemPrompt(newPrompt);
+  }, [user, conversationContext, promptType]);
 
   // Function to send a response request to the model
   const sendResponseRequest = () => {
@@ -446,6 +372,26 @@ const MainApp = () => {
     }
   };
 
+
+  function handleSessionUpdate(systemPrompt: string) {
+    const sessionUpdate = {
+      type: 'session.update',
+      session: {
+        input_audio_transcription: {
+          model: "whisper-1",
+          language: "tr", // Specify Turkish for improved transcription accuracy
+          prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe’nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin “hipertansiyon”, “diyabet”, “anestezi”, “patoloji” vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse “[anlaşılmadı]” etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
+
+        },
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16', 
+        modalities: ['audio', 'text'],
+        instructions: systemPrompt
+      }
+    };
+    dataChannelRef.current .send(JSON.stringify(sessionUpdate));
+  }
+
   // Function to initialize the connection (called when "Enable" button is pressed)
   async function init() {
     try {
@@ -496,30 +442,8 @@ const MainApp = () => {
         //console.log('Data channel opened');
         // Send initial session update to configure audio
         if (dc.readyState === 'open') {
-          const sessionUpdate = {
-            type: 'session.update',
-            session: {
-              input_audio_transcription: {
-                model: "whisper-1",
-                language: "tr", // Specify Turkish for improved transcription accuracy
-                prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe’nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin “hipertansiyon”, “diyabet”, “anestezi”, “patoloji” vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse “[anlaşılmadı]” etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
-      
-              },
-              input_audio_format: 'pcm16',
-              output_audio_format: 'pcm16',
-              modalities: ['audio', 'text'],
-              instructions: systemPrompt,
-              turn_detection: {
-                type: 'server_vad',
-                silence_duration_ms: 600,
-                prefix_padding_ms: 300,
-                threshold: 0.5,
-                create_response: true
-              }
-            }
-          };
-          dc.send(JSON.stringify(sessionUpdate));
-          //console.log('Sent session update:', sessionUpdate);
+          // Set conversation mode as default and update session
+          handlePromptTypeChange('conversation');
         }
       });
 
@@ -544,7 +468,7 @@ const MainApp = () => {
           
           // Create a new MediaStream with only one audio track
           const newStream = new MediaStream();
-          const audioTracks = event.streams[0].getAudioTracks();
+          const audioTracks = event.streams[0].getAudioTracks(); 
           
           // Only add the first audio track if it exists
           if (audioTracks.length > 0) {
@@ -751,6 +675,31 @@ const MainApp = () => {
             <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
           </TouchableOpacity>
         </View>
+
+        {isStarted && (
+          <View style={styles.promptTypeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.promptTypeButton,
+                promptType === 'conversation' && styles.promptTypeButtonActive,
+                { backgroundColor: '#007AFF' }
+              ]}
+              onPress={() => handlePromptTypeChange('conversation')}
+            >
+              <Text style={styles.promptTypeButtonText}>Sohbet Modu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.promptTypeButton,
+                promptType === 'questions' && styles.promptTypeButtonActive,
+                { backgroundColor: '#FF9500' }
+              ]}
+              onPress={() => handlePromptTypeChange('questions')}
+            >
+              <Text style={styles.promptTypeButtonText}>Soru Modu</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <ScrollView 
           ref={scrollViewRef}
@@ -1032,5 +981,30 @@ const styles = StyleSheet.create({
   progressBar: {
     height: '100%',
     backgroundColor: 'white',
+  },
+  promptTypeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  promptTypeButton: {
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    flex: 1,
+    maxWidth: 150,
+    alignItems: 'center',
+  },
+  promptTypeButtonActive: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  promptTypeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
