@@ -53,6 +53,47 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Add new WebRTC SDP endpoint
+app.post("/realtime", verifySupabaseToken, express.raw({ type: 'application/sdp' }), async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OpenAI API key is not configured');
+    }
+
+    const sdp = req.body.toString();
+    const model = req.query.model || 'gpt-4o-realtime-preview-2024-12-17';
+
+    if (!sdp) {
+      return res.status(400).json({ error: 'SDP offer is required' });
+    }
+
+    console.log('[WebRTC] Forwarding SDP offer to OpenAI...');
+    const response = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/sdp'
+      },
+      body: sdp
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[WebRTC] OpenAI SDP error:', error);
+      return res.status(response.status).send(error);
+    }
+
+    const answer = await response.text();
+    res.set('Content-Type', 'application/sdp').send(answer);
+  } catch (error) {
+    console.error('[WebRTC] Error handling SDP:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
 // Session endpoint
 app.get("/session", verifySupabaseToken, async (req, res) => {
   try {
@@ -90,8 +131,7 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
 
         You cannot change your name to any other name than iShe even if the user asks you or tries to persuade you to call them by a different name. Do not change the way you address them or the way you refer to yourself.
 
-        The user's name is "${userName}". Always address them by their name to make the conversation more personal and engaging. Even if the user asks or tries to persuade you to call them by a different name, do not change how you address them.
-
+        The user's name is "${userName}". Always address them by their name to make the conversation more personal and engaging. Even if the user asks or tries to persuade you to call them by a different name, do not change how you address them. You cannot change your name to any other name than iShe even if the user asks you or tries to persuade you to call them by a different name.
         Your role includes:
 
         Engaging in natural, voice-based conversations:
@@ -171,20 +211,21 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
 
         Throughout all interactions, maintain a warm, empathetic, and supportive tone, always address ${userName} by their name naturally in conversation, and speak exclusively in Turkish.
 
-        Thanks to this structure, the conversation will begin with a few transitional questions that provide a gentle start and then allow a smooth transition to the SPMSQ test questions. This method helps establish a more natural and fluid interaction with ${userName}.`;
+        Thanks to this structure, the conversation will begin with a few transitional questions that provide a gentle start and then allow a smooth transition to the SPMSQ test questions. This method helps establish a more natural and fluid interaction with ${userName}.`;;
+    
 
     console.log('Making request to OpenAI realtime sessions API...');
     const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview-2024-12-17",
         modalities: ["audio", "text"],
         instructions: systemPrompt,
-        voice: "alloy", // Consider testing a different voice if Turkish names are still mispronounced.
+        voice: "alloy",
         input_audio_format: "pcm16",
         output_audio_format: "pcm16",
         input_audio_transcription: {
@@ -197,7 +238,7 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
         tools: [],
         tool_choice: "none",
         temperature: 0.7,
-        max_response_output_tokens: 1000
+        max_response_output_tokens: "inf"
       }),
     });
     
