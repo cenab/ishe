@@ -25,12 +25,12 @@ export const LoginScreen = () => {
 
   const handleSubmit = async () => {
     if (!email || !password) {
-      setError('Please enter both email and password');
+      setError('Lütfen e-posta ve şifre giriniz');
       return;
     }
 
     if (isSignUp && !name) {
-      setError('Please enter your name');
+      setError('Lütfen adınızı giriniz');
       return;
     }
 
@@ -40,12 +40,12 @@ export const LoginScreen = () => {
     try {
       if (isSignUp) {
         await signUp(email, password, name);
-        setError('Please check your email for verification');
+        setError('Doğrulama için lütfen e-postanızı kontrol ediniz');
       } else {
         await signIn(email, password);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      setError(err instanceof Error ? err.message : 'Giriş yapılamadı');
     } finally {
       setIsLoading(false);
     }
@@ -72,8 +72,8 @@ export const LoginScreen = () => {
               style={styles.logo}
               resizeMode="cover"
             />
-            <Text style={styles.title}>Hi, I'm iShe</Text>
-            <Text style={styles.subtitle}>{isSignUp ? 'Create an account to talk to me' : 'Sign in to talk to me'}</Text>
+            <Text style={styles.title}>Merhaba, Ben iShe</Text>
+            <Text style={styles.subtitle}>{isSignUp ? 'Benimle konuşmak için hesap oluşturun' : 'Benimle konuşmak için giriş yapın'}</Text>
           </View>
 
           <View style={styles.form}>
@@ -82,7 +82,7 @@ export const LoginScreen = () => {
                 <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Your Name"
+                  placeholder="Adınız"
                   placeholderTextColor="#999"
                   value={name}
                   onChangeText={setName}
@@ -96,7 +96,7 @@ export const LoginScreen = () => {
               <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="E-posta"
                 placeholderTextColor="#999"
                 value={email}
                 onChangeText={setEmail}
@@ -110,7 +110,7 @@ export const LoginScreen = () => {
               <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder="Şifre"
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
@@ -135,7 +135,7 @@ export const LoginScreen = () => {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text style={styles.loginButtonText}>
-                  {isSignUp ? 'Sign Up' : 'Sign In'}
+                  {isSignUp ? 'Kayıt Ol' : 'Giriş Yap'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -145,7 +145,7 @@ export const LoginScreen = () => {
               onPress={toggleMode}
             >
               <Text style={styles.switchButtonText}>
-                {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+                {isSignUp ? 'Hesabınız var mı? Giriş Yapın' : 'Hesabınız yok mu? Kayıt Olun'}
               </Text>
             </TouchableOpacity>
           </View>

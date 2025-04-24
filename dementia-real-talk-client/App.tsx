@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Image,
+  Linking,
 } from 'react-native';
 import {
   RTCPeerConnection,
@@ -27,9 +28,9 @@ import { generateSystemPromptToConverse, generateSystemPromptToAskQuestions } fr
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
-  android: 'http://10.0.2.2:3000',
-  ios: 'http://localhost:3000',
-  default: 'http://localhost:3000',
+  android: 'http://3.127.58.246',
+  ios: 'http://3.127.58.246',
+  default: 'http://3.127.58.246',
 });
 
 // Add a new type for messages
@@ -815,7 +816,37 @@ const MainApp = () => {
 };
 
 const AppContent = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, handleDeepLink } = useAuth();
+
+  // Set up deep link handling
+  useEffect(() => {
+    // Handle links that open the app
+    const handleDeepLinkEvent = (event: {url: string}) => {
+      const url = event.url;
+      console.log('Deep link received:', url);
+      handleDeepLink(url);
+    };
+
+    // Handle the initial URL that may have opened the app
+    const getInitialURL = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        console.log('Initial URL:', initialUrl);
+        handleDeepLink(initialUrl);
+      }
+    };
+
+    // Add event listener for deep links while app is running
+    const subscription = Linking.addEventListener('url', handleDeepLinkEvent);
+    
+    // Check for initial URL that opened the app
+    getInitialURL();
+
+    // Clean up
+    return () => {
+      subscription.remove();
+    };
+  }, [handleDeepLink]);
 
   if (loading) {
     return (

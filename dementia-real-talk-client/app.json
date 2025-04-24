@@ -16,13 +16,17 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "dementiarealtalkreactapp",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need access to your microphone for real-time audio communication.",
         "NSCameraUsageDescription": "We need access to your camera for WebRTC functionality."
       },
-      "bundleIdentifier": "com.dementiarealtalkreactapp"
+      "bundleIdentifier": "com.dementiarealtalkreactapp",
+      "associatedDomains": [
+        "applinks:3.127.58.246"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -34,7 +38,33 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.CAMERA"
       ],
-      "package": "com.dementiarealtalkreactapp"
+      "package": "com.dementiarealtalkreactapp",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "http",
+              "host": "3.127.58.246",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "3.127.58.246",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "dementiarealtalkreactapp",
+              "host": "*"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/ayshe.png"

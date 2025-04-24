@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Alert } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 
 type AuthContextType = {
   user: User | null;
@@ -10,6 +10,7 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
+  handleDeepLink: (url: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +44,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
+  // Function to handle deep links for authentication
+  const handleDeepLink = async (url: string) => {
+    console.log('Processing authentication deep link:', url);
+    
+    try {
+      // Check if this is a Supabase authentication link
+      if (url.includes('access_token=') || url.includes('refresh_token=') || url.includes('type=recovery')) {
+        // Extract the parameters from the URL
+        const params = new URLSearchParams(url.split('#')[1] || url.split('?')[1] || '');
+        
+        // If we have an access token or refresh token, set the session
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        
+        if (accessToken) {
+          console.log('Setting session from deep link access token');
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+          
+          if (error) {
+            console.error('Error setting session from deep link:', error);
+            Alert.alert('Authentication Error', 'Failed to authenticate with the provided link');
+          } else {
+            console.log('Successfully set session from deep link');
+            setSession(data.session);
+            setUser(data.session?.user || null);
+          }
+        }
+        
+        // Handle password reset links
+        if (params.get('type') === 'recovery') {
+          // Extract token for password reset flow
+          const token = params.get('token');
+          if (token) {
+            // Navigate to password reset screen or show dialog
+            console.log('Password reset token received:', token);
+            Alert.alert(
+              'Reset Password',
+              'You can now reset your password',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    // Here you would typically navigate to a password reset screen
+                    // navigation.navigate('ResetPassword', { token });
+                  }
+                }
+              ]
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing deep link:', error);
+      Alert.alert('Error', 'Failed to process the authentication link');
+    }
+  };
+
   const handleAuthError = (error: AuthError, action: string) => {
     console.error(`Error during ${action}:`, error);
     const message = error.message || `An error occurred during ${action}`;
@@ -71,14 +132,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, name: string) => {
     console.log('Attempting sign up for:', email);
     try {
-      console.log('Kong connectivity test passed, proceeding with signup');
+      // Define a custom redirect URL using our URL scheme
+      const redirectUrl = Platform.select({
+        android: 'dementiarealtalkreactapp://login-callback',
+        ios: 'dementiarealtalkreactapp://login-callback',
+        default: 'http://3.127.58.246/login-callback'
+      });
+      
+      console.log('Using redirect URL:', redirectUrl);
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             name: name,
-          }
+          },
+          emailRedirectTo: redirectUrl
         }
       });
 
@@ -89,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Since autoconfirm is enabled, we can show a success message
         Alert.alert(
           'Sign Up Successful',
-          'You can now sign in with your credentials.'
+          'Please check your email for a confirmation link.'
         );
       }
     } catch (error) {
@@ -121,6 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signIn,
       signUp,
       signOut,
+      handleDeepLink,
     }}>
       {children}
     </AuthContext.Provider>
