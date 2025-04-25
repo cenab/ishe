@@ -28,9 +28,9 @@ import { generateSystemPromptToConverse, generateSystemPromptToAskQuestions } fr
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
-  android: 'http://3.127.58.246',
-  ios: 'http://3.127.58.246',
-  default: 'http://3.127.58.246',
+  android: 'https://3.127.58.246',
+  ios: 'https://3.127.58.246',
+  default: 'https://3.127.58.246',
 });
 
 // Add a new type for messages

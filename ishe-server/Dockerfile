@@ -14,7 +14,6 @@ COPY . .
 # Set environment variables
 ENV NODE_ENV production
 ENV PORT 3000
-ENV GOOGLE_APPLICATION_CREDENTIALS /app/google-credentials.json
 
 # Expose the port
 EXPOSE 3000

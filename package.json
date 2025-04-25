@@ -1,35 +1,37 @@
 {
-  "name": "ayshe",
+  "name": "ishe",
   "version": "1.0.0",
-  "description": "A real-time conversation application with Ayshe, your AI companion",
-  "private": true,
-  "workspaces": [
-    "ishe-server",
-    "ishe-client"
+  "description": "Real-time voice conversation app with AI for dementia patients and caregivers",
+  "main": "index.js",
+  "type": "module",
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not op_mini all"
   ],
   "scripts": {
+    "client": "cd ishe-client && npm start",
+    "server": "cd ishe-server && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "install-all": "npm install && cd ishe-client && npm install && cd ../ishe-server && npm install",
+    "build": "cd ishe-client && npm run build",
     "start:server": "cd ishe-server && npm start",
     "start:client": "cd ishe-client && npx expo start",
     "dev:server": "cd ishe-server && npm run dev",
-    "emulator": "emulator -avd Pixel_4a_Edited_API_33",
-    "emulator:list": "emulator -list-avds",
-    "emulator:create": "avdmanager create avd -n Pixel_4a_Edited_API_33 -k 'system-images;android-33;google_apis;x86_64' -d 'pixel'",
+    "emulator": "cd ~/Android/Sdk/emulator && ./emulator -avd Pixel_3a_API_34_extension_level_7_x86_64 -netdelay none -netspeed full &",
     "android:dev": "cd ishe-client && npx expo start --android",
-    "android:run": "cd ishe-client && npx expo run:android",
-    "ios:dev": "cd ishe-client && npx expo start --ios",
-    "ios:run": "cd ishe-client && npx expo run:ios",
-    "install:all": "npm install && npm run install:server && npm run install:client",
-    "install:server": "cd ishe-server && npm install",
-    "install:client": "cd ishe-client && npm install",
-    "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop",
-    "supabase:reset": "supabase db reset",
-    "dev": "concurrently \"npm run dev:server\" \"npm run start:client\"",
     "android": "npm run emulator && npm run start:server && npm run android:dev"
   },
-  "devDependencies": {
+  "keywords": [
+    "dementia",
+    "ai",
+    "voice",
+    "conversation",
+    "caregiver"
+  ],
+  "author": "iShe Team",
+  "license": "MIT",
+  "dependencies": {
     "concurrently": "^8.2.2"
-  },
-  "author": "",
-  "license": "MIT"
+  }
 } 

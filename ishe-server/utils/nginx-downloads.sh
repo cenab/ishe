@@ -52,4 +52,4 @@ else
     exit 1
 fi
 
-echo "You can now download the APK at http://3.127.58.246/ishe.apk" 
+echo "You can now download the APK at https://3.127.58.246/ishe.apk" 

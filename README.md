@@ -1,14 +1,17 @@
-# Ayshe
+# iShe
 
-A real-time conversation application with Ayshe, your AI companion.
+A real-time conversation application with iShe, your AI companion.
 
 ## Project Structure
 
 ```
-dementia-real-talk/
-├── supabase/                  # Supabase configuration and migrations
-├── dementia-real-talk-server/ # Backend server
-└── dementia-real-talk-client/ # React Native client
+ishe/
+├── ishe-client/               # React Native client application
+├── ishe-server/               # Express.js server & API
+│   ├── src/                   # Server source code
+│   └── supabase/              # Supabase configuration and migrations
+├── .github/                   # GitHub Actions workflows 
+└── package.json               # Project configuration
 ```
 
 ## Prerequisites
@@ -28,17 +31,18 @@ dementia-real-talk/
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd dementia-real-talk
+git clone https://github.com/yourusername/ishe.git
+cd ishe
 ```
 
-2. Install all dependencies:
+2. Install dependencies:
 ```bash
-npm run install:all
+npm run install-all
 ```
 
 3. Set up Supabase:
 ```bash
+cd ishe-server
 npm run supabase:start
 ```
 
@@ -61,19 +65,17 @@ npm run emulator
 6. Start the development servers:
 
 ```bash
-# Start everything (server + client) in development mode
+# Run both client and server
 npm run dev
 
-# Or start individual components:
+# Run server only
+npm run server
+
+# Run client only
+npm run client
 
 # Start Supabase
-npm run supabase:start
-
-# Start server in development mode
-npm run dev:server
-
-# Start client for development
-npm run start:client
+cd ishe-server && npm run supabase:start
 
 # Android Development
 npm run android        # Starts both emulator and Expo dev build
