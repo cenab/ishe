@@ -110,6 +110,8 @@ expo build:android
 
 The APK for this application can be downloaded directly from our server at: http://3.127.58.246/ishe.apk
 
+The APK is automatically rebuilt and deployed whenever changes are pushed to this repository.
+
 ## Troubleshooting
 
 Common issues and solutions:
