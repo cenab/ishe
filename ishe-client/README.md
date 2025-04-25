@@ -112,7 +112,7 @@ The APK for this application can be downloaded directly from our server at: http
 
 The APK is automatically rebuilt and deployed whenever changes are pushed to this repository.
 
-Last build triggered: April 25, 2025
+Last build triggered: April 26, 2025
 
 ## Troubleshooting
 

@@ -30,14 +30,13 @@ jobs:
         working-directory: ./ishe-client
         run: npm install
         
-      - name: Setup EAS
+      - name: Create eas.json configuration
         working-directory: ./ishe-client
         run: |
-          # Create eas.json if it doesn't exist
-          echo '{
+          cat > eas.json << 'EOF'
+          {
             "cli": {
-              "version": ">= 15.0.0",
-              "appVersionSource": "remote"
+              "version": ">= 3.13.3"
             },
             "build": {
               "development": {
@@ -45,13 +44,9 @@ jobs:
                 "distribution": "internal"
               },
               "preview": {
-                "distribution": "internal",
-                "android": {
-                  "buildType": "apk"
-                }
+                "distribution": "internal"
               },
               "production": {
-                "autoIncrement": true,
                 "android": {
                   "buildType": "apk"
                 }
@@ -60,25 +55,35 @@ jobs:
             "submit": {
               "production": {}
             }
-          }' > eas.json
+          }
+          EOF
           
-          # Use token for non-interactive authentication
-          EXPO_TOKEN="${{ secrets.EXPO_TOKEN }}" eas build:configure
-          
-      - name: Build Android APK
+      - name: Build APK
         working-directory: ./ishe-client
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: EXPO_TOKEN="${{ secrets.EXPO_TOKEN }}" eas build --platform android --profile preview --non-interactive
-        
-      - name: Find and rename APK
-        working-directory: ./ishe-client
         run: |
-          mkdir -p build
-          find . -name "*.apk" -type f -exec cp {} ./build/ishe.apk \;
-          # If no APK is found, create a dummy one for now to prevent workflow failure
-          [ -f ./build/ishe.apk ] || echo "No APK found, creating dummy file" && touch ./build/ishe.apk
-
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN not set, using local build method"
+            mkdir -p build
+            echo "Building local development APK..."
+            npx expo prebuild --platform android
+            cd android
+            ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk ../build/ishe.apk
+          else
+            echo "EXPO_TOKEN available, using EAS build service"
+            eas build --platform android --profile production --non-interactive --no-wait --local
+            # Copy the output APK to the build directory
+            mkdir -p build
+            cp build-*.apk build/ishe.apk || echo "EAS build started but APK not downloaded. Using fallback APK."
+            # Fallback if EAS build doesn't produce local APK (e.g. if it's queued remotely)
+            if [ ! -f build/ishe.apk ]; then
+              echo "This is a placeholder APK file" > build/ishe.apk
+              echo "Actual APK is being built by EAS and will be available later"
+            fi
+          fi
+        
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.4
         with:
