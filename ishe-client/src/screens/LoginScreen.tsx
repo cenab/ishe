@@ -68,7 +68,7 @@ export const LoginScreen = () => {
         <View style={styles.content}>
           <View style={styles.header}>
             <Image
-              source={require('../../assets/ayshe.png')}
+              source={require('../../assets/ishe.png')}
               style={styles.logo}
               resizeMode="cover"
             />

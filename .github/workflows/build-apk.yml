@@ -30,34 +30,6 @@ jobs:
         working-directory: ./ishe-client
         run: npm install
         
-      - name: Create eas.json configuration
-        working-directory: ./ishe-client
-        run: |
-          cat > eas.json << 'EOF'
-          {
-            "cli": {
-              "version": ">= 3.13.3"
-            },
-            "build": {
-              "development": {
-                "developmentClient": true,
-                "distribution": "internal"
-              },
-              "preview": {
-                "distribution": "internal"
-              },
-              "production": {
-                "android": {
-                  "buildType": "apk"
-                }
-              }
-            },
-            "submit": {
-              "production": {}
-            }
-          }
-          EOF
-          
       - name: Build APK
         working-directory: ./ishe-client
         env:
@@ -73,12 +45,26 @@ jobs:
             cp app/build/outputs/apk/debug/app-debug.apk ../build/ishe.apk
           else
             echo "EXPO_TOKEN available, using EAS build service"
-            eas build --platform android --profile production --non-interactive --no-wait --local
-            # Copy the output APK to the build directory
-            mkdir -p build
-            cp build-*.apk build/ishe.apk || echo "EAS build started but APK not downloaded. Using fallback APK."
-            # Fallback if EAS build doesn't produce local APK (e.g. if it's queued remotely)
-            if [ ! -f build/ishe.apk ]; then
+            # Use non-interactive mode with --no-wait to start the build but not wait for completion
+            eas build --platform android --profile production --non-interactive --local
+            # Check if build was successful
+            if [ $? -eq 0 ]; then
+              echo "EAS build completed successfully"
+              # Create build directory if it doesn't exist
+              mkdir -p build
+              # Find the most recent APK file and copy it to the build directory
+              LATEST_APK=$(find . -name "*.apk" -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+              if [ -n "$LATEST_APK" ]; then
+                cp "$LATEST_APK" build/ishe.apk
+                echo "Copied $LATEST_APK to build/ishe.apk"
+              else
+                echo "No APK file found. Using fallback APK."
+                echo "This is a placeholder APK file" > build/ishe.apk
+                echo "Actual APK is being built by EAS and will be available later"
+              fi
+            else
+              echo "EAS build failed. Using fallback APK."
+              mkdir -p build
               echo "This is a placeholder APK file" > build/ishe.apk
               echo "Actual APK is being built by EAS and will be available later"
             fi

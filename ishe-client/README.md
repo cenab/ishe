@@ -1,6 +1,6 @@
-# Ayshe Client
+# iShe Client
 
-The client application for Ayshe, a real-time conversation application with your AI companion.
+The client application for iShe, a real-time conversation application with your AI companion.
 
 ## Tech Stack
 

@@ -1,36 +1,36 @@
 {
   "expo": {
-    "name": "Dementia Real Talk",
-    "slug": "dementia-real-talk",
+    "name": "iShe",
+    "slug": "ishe",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/ayshe.png",
+    "icon": "./assets/ishe.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "developmentClient": true,
     "splash": {
-      "image": "./assets/ayshe.png",
+      "image": "./assets/ishe.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
-    "scheme": "dementiarealtalkreactapp",
+    "scheme": "ishe",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need access to your microphone for real-time audio communication.",
         "NSCameraUsageDescription": "We need access to your camera for WebRTC functionality."
       },
-      "bundleIdentifier": "com.dementiarealtalkreactapp",
+      "bundleIdentifier": "com.ishe",
       "associatedDomains": [
         "applinks:3.127.58.246"
       ]
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/ayshe.png",
+        "foregroundImage": "./assets/ishe.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -38,7 +38,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.CAMERA"
       ],
-      "package": "com.dementiarealtalkreactapp",
+      "package": "com.ishe",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -55,7 +55,7 @@
               "pathPrefix": "/"
             },
             {
-              "scheme": "dementiarealtalkreactapp",
+              "scheme": "ishe",
               "host": "*"
             }
           ],
@@ -67,7 +67,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/ayshe.png"
+      "favicon": "./assets/ishe.png"
     },
     "plugins": [
       [
@@ -82,6 +82,13 @@
       "eas": {
         "projectId": "fab0e87d-6f29-4dc7-9ea0-820efc7408bb"
       }
-    }
+    },
+    "description": "The client application for iShe, a real-time conversation application with your AI companion",
+    "sdkVersion": "52.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ]
   }
 }

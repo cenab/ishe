@@ -134,9 +134,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Define a custom redirect URL using our URL scheme
       const redirectUrl = Platform.select({
-        android: 'dementiarealtalkreactapp://login-callback',
-        ios: 'dementiarealtalkreactapp://login-callback',
-        default: 'https://3.127.58.246/login-callback'
+        android: 'ishe://login-callback',
+        ios: 'ishe://login-callback',
+        web: 'http://localhost:3000/login-callback',
       });
       
       console.log('Using redirect URL:', redirectUrl);

@@ -663,7 +663,7 @@ const MainApp = () => {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image 
-              source={require('./assets/ayshe.png')}
+              source={require('./assets/ishe.png')}
               style={styles.logo}
               resizeMode="cover"
             />
