@@ -59,13 +59,13 @@ ios/
 supabase.cred.md
 
 
-dementia-real-talk-key-new.pem
-dementia-real-talk-key.pem
-dementia-real-talk-key.pub
+ishe-key-new.pem
+ishe-key.pem
+ishe-key.pub
 deploy_docker.sh
 server_ssh
 supabase/
-dementia-real-talk-server/google-credentials.json
+ishe-server/google-credentials.json
 deployment_setup.sh
 
 deployment_setup.md
