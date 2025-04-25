@@ -29,6 +29,7 @@ jobs:
           rsync -avz ./ishe-server/ $EC2_USER@$EC2_HOST:~/ishe-server/
           
           # Execute commands individually to avoid heredoc issues
+          # Running each command in a separate SSH connection
           ssh $EC2_USER@$EC2_HOST "cd ~/ishe-server && sudo docker-compose down"
           ssh $EC2_USER@$EC2_HOST "cd ~/ishe-server && sudo docker-compose build"
           ssh $EC2_USER@$EC2_HOST "cd ~/ishe-server && sudo docker-compose up -d"
