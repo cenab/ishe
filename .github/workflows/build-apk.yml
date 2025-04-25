@@ -1,0 +1,102 @@
+name: Build and Deploy Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ishe-client/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+          
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11'
+          
+      - name: Install Expo CLI
+        run: npm install -g expo-cli eas-cli
+        
+      - name: Install dependencies
+        working-directory: ./ishe-client
+        run: npm install
+        
+      - name: Setup EAS
+        working-directory: ./ishe-client
+        run: |
+          echo "${{ secrets.EXPO_TOKEN }}" | eas login
+          
+      - name: Configure EAS for Android build
+        working-directory: ./ishe-client
+        run: |
+          cat > eas.json << EOF
+          {
+            "cli": {
+              "version": ">= 15.0.6",
+              "appVersionSource": "remote"
+            },
+            "build": {
+              "development": {
+                "developmentClient": true,
+                "distribution": "internal"
+              },
+              "preview": {
+                "distribution": "internal",
+                "android": {
+                  "buildType": "apk"
+                }
+              },
+              "production": {
+                "autoIncrement": true,
+                "android": {
+                  "buildType": "apk"
+                }
+              }
+            },
+            "submit": {
+              "production": {}
+            }
+          }
+          EOF
+          
+      - name: Build Android APK
+        working-directory: ./ishe-client
+        run: eas build --platform android --profile preview --local
+        
+      - name: Rename APK
+        working-directory: ./ishe-client
+        run: |
+          mkdir -p build
+          find . -name "*.apk" -type f -exec cp {} ./build/ishe.apk \;
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+          
+      - name: Deploy APK to EC2
+        env:
+          EC2_HOST: 3.127.58.246
+          EC2_USER: ec2-user
+        run: |
+          # Ensure SSH host key is recognized
+          mkdir -p ~/.ssh
+          ssh-keyscan $EC2_HOST >> ~/.ssh/known_hosts
+          
+          # Create downloads directory on server if it doesn't exist
+          ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/downloads"
+          
+          # Copy APK to server
+          scp ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
+          
+          # Move APK to the right directory and set permissions
+          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk" 

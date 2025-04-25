@@ -16,6 +16,15 @@ server {
     # Configure proper character encoding
     charset utf-8;
 
+    # Serve APK file
+    location = /ishe.apk {
+        alias /var/www/downloads/ishe.apk;
+        add_header Content-Disposition "attachment; filename=ishe.apk";
+        add_header Content-Type application/vnd.android.package-archive;
+        try_files $uri =404;
+    }
+
+    # API and other routes
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -35,6 +44,10 @@ EOF
 
 # Move the configuration file to Nginx directory
 sudo mv /tmp/ishe.conf /etc/nginx/conf.d/
+
+# Ensure downloads directory exists
+sudo mkdir -p /var/www/downloads
+sudo chmod 755 /var/www/downloads
 
 # Test the Nginx configuration
 echo "Testing Nginx configuration..."
