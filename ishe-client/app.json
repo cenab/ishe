@@ -80,7 +80,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "fab0e87d-6f29-4dc7-9ea0-820efc7408bb"
+        "projectId": "4849b331-28a1-47fa-b1b7-c2cd51d2b48d"
       }
     },
     "description": "The client application for iShe, a real-time conversation application with your AI companion",
@@ -89,6 +89,7 @@
       "ios",
       "android",
       "web"
-    ]
+    ],
+    "owner": "cenab"
   }
 }

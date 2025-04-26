@@ -18,7 +18,7 @@
     "start:server": "cd ishe-server && npm start",
     "start:client": "cd ishe-client && npx expo start",
     "dev:server": "cd ishe-server && npm run dev",
-    "emulator": "cd ~/Android/Sdk/emulator && ./emulator -avd Pixel_3a_API_34_extension_level_7_x86_64 -netdelay none -netspeed full &",
+    "emulator": "cd ~/Library/Android/sdk/emulator && ./emulator -avd Pixel_4a_Edited_API_33 -netdelay none -netspeed full &",
     "android:dev": "cd ishe-client && npx expo start --android",
     "android": "npm run emulator && npm run start:server && npm run android:dev"
   },
