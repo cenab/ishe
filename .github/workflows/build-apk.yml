@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'ishe-client/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+    # Allows manual triggering from GitHub Actions tab
 
 jobs:
   build:
