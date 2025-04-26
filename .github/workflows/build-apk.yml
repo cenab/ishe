@@ -38,11 +38,18 @@ jobs:
           if [ -z "$EXPO_TOKEN" ]; then
             echo "EXPO_TOKEN not set, using local build method"
             mkdir -p build
-            echo "Building local development APK..."
+            echo "Building local release APK..."
+            # Ensure the keystore directory exists
+            mkdir -p ../keystore
+            # Copy the keystore file if it doesn't exist (from the source repo)
+            if [ ! -f "../keystore/ishe-release-key.keystore" ]; then
+              echo "Copying keystore from source..."
+              cp $GITHUB_WORKSPACE/keystore/ishe-release-key.keystore ../keystore/
+            fi
             npx expo prebuild --platform android
             cd android
-            ./gradlew assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk ../build/ishe.apk
+            ./gradlew assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
           else
             echo "EXPO_TOKEN available, using EAS build service"
             # Use non-interactive mode with --no-wait to start the build but not wait for completion
@@ -75,7 +82,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
           
-      - name: Deploy APK to EC2
+      - name: Deploy APK and keystore to EC2
         env:
           EC2_HOST: 3.127.58.246
           EC2_USER: ec2-user
@@ -87,8 +94,14 @@ jobs:
           # Create downloads directory on server if it doesn't exist
           ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/downloads"
           
+          # Create keystore directory on server if it doesn't exist
+          ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/keystore"
+          
           # Copy APK to server
           scp ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
           
-          # Move APK to the right directory and set permissions
-          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk" 
+          # Copy keystore to server
+          scp ./keystore/ishe-release-key.keystore $EC2_USER@$EC2_HOST:~/ishe-release-key.keystore
+          
+          # Move files to the right directories and set permissions
+          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore" 
