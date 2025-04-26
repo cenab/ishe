@@ -1039,4 +1039,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-// Trigger build

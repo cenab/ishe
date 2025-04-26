@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch all history and tags
       
       - name: Setup Node.js
         uses: actions/setup-node@v2
@@ -28,6 +30,26 @@ jobs:
           
       - name: Install Expo CLI
         run: npm install -g expo-cli eas-cli
+        
+      - name: Configure EAS for APK Build
+        run: |
+          cd ./ishe-client
+          if [ ! -f "eas.json" ]; then
+            echo '{"cli":{"version":">= 5.0.0"},"build":{"preview":{"android":{"buildType":"apk"}},"production":{"autoIncrement":true}}}' > eas.json
+          else
+            echo 'Updating existing eas.json'
+            # Try to use jq if available
+            if command -v jq &> /dev/null; then
+              jq '.build.preview.android.buildType = "apk"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+            else
+              # Simple grep check to avoid duplicate entries
+              if ! grep -q '"buildType"' eas.json; then
+                # Very basic sed replacement - might not work for all JSON structures
+                sed -i 's/"preview"[ ]*:[ ]*{/"preview":{"android":{"buildType":"apk"},/g' eas.json || echo "Failed to update eas.json, continuing anyway"
+              fi
+            fi
+          fi
+          cat eas.json
         
       - name: Install dependencies
         working-directory: ./ishe-client
@@ -55,28 +77,23 @@ jobs:
             cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
           else
             echo "EXPO_TOKEN available, using EAS build service"
-            # Use non-interactive mode with --no-wait to start the build but not wait for completion
-            eas build --platform android --profile production --non-interactive --local
+            # Use non-interactive mode to start the build
+            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk
             # Check if build was successful
-            if [ $? -eq 0 ]; then
-              echo "EAS build completed successfully"
-              # Create build directory if it doesn't exist
+            if [ ! -f "./build/ishe.apk" ]; then
+              echo "EAS build did not produce an APK. Building locally as fallback..."
               mkdir -p build
-              # Find the most recent APK file and copy it to the build directory
-              LATEST_APK=$(find . -name "*.apk" -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
-              if [ -n "$LATEST_APK" ]; then
-                cp "$LATEST_APK" build/ishe.apk
-                echo "Copied $LATEST_APK to build/ishe.apk"
-              else
-                echo "No APK file found. Using fallback APK."
-                echo "This is a placeholder APK file" > build/ishe.apk
-                echo "Actual APK is being built by EAS and will be available later"
+              # Ensure the keystore directory exists
+              mkdir -p ../util/keystore
+              # Copy the keystore file if it doesn't exist (from the source repo)
+              if [ ! -f "../util/keystore/ishe-release-key.keystore" ]; then
+                echo "Copying keystore from source..."
+                cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
               fi
-            else
-              echo "EAS build failed. Using fallback APK."
-              mkdir -p build
-              echo "This is a placeholder APK file" > build/ishe.apk
-              echo "Actual APK is being built by EAS and will be available later"
+              npx expo prebuild --platform android
+              cd android
+              ./gradlew assembleRelease
+              cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
             fi
           fi
         
@@ -94,6 +111,11 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan $EC2_HOST >> ~/.ssh/known_hosts
           
+          # Verify APK exists before uploading
+          echo "Checking APK before upload..."
+          ls -la ./ishe-client/build/
+          file ./ishe-client/build/ishe.apk
+          
           # Create downloads directory on server if it doesn't exist
           ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/downloads"
           
@@ -101,10 +123,15 @@ jobs:
           ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/keystore"
           
           # Copy APK to server
-          scp ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
+          echo "Uploading APK to server..."
+          scp -v ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
           
           # Copy keystore to server
           scp ./util/keystore/ishe-release-key.keystore $EC2_USER@$EC2_HOST:~/ishe-release-key.keystore
           
           # Move files to the right directories and set permissions
-          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore" 
+          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo chown nginx:nginx /var/www/downloads/ishe.apk && sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore && sudo ls -la /var/www/downloads/"
+          
+          # Verify the API is downloadable
+          echo "Testing APK URL..."
+          curl -I http://$EC2_HOST/ishe.apk 
