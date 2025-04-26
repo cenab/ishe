@@ -19,6 +19,11 @@ import {
   MediaStream,
   MediaStreamTrack,
   RTCView,
+  RTCSdpType,
+  RTCDataChannelEvent,
+  RTCTrackEvent,
+  RTCPeerConnectionIceEvent,
+  MediaStreamTrack as WebRTCMediaStreamTrack
 } from 'react-native-webrtc';
 import { Audio } from 'expo-av';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -127,6 +132,7 @@ const MainApp = () => {
   // Function to store conversation in vector database
   const storeConversation = async (text: string, metadata: any = {}) => {
     try {
+      console.log('[API] Storing conversation snippet...');
       const response = await fetch(`${API_URL}/api/conversations`, {
         method: 'POST',
         headers: {
@@ -140,15 +146,18 @@ const MainApp = () => {
       });
 
       if (!response.ok) {
+        console.error(`[API] Failed to store conversation. Status: ${response.status}`);
         throw new Error('Failed to store conversation');
       }
+      console.log('[API] Conversation snippet stored successfully.');
     } catch (error) {
-      //console.error('Error storing conversation:', error);
+      console.error('[API] Error storing conversation:', error);
     }
   };
 
   // Function to start recording
   const startRecording = async () => {
+    console.log('[Audio] Attempting to start recording...');
     // Prevent starting if already recording
     if (isRecording || recording) {
       console.log('Recording is already in progress. Skipping start.');
@@ -157,19 +166,24 @@ const MainApp = () => {
 
     try {
       // Request permissions
+      console.log('[Audio] Requesting permissions...');
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
-        console.error('Permission to record was denied');
+        console.error('[Audio] Permission to record was denied');
         return;
       }
+      console.log('[Audio] Permissions granted.');
 
       // Set audio mode
+      console.log('[Audio] Setting audio mode...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
+      console.log('[Audio] Audio mode set.');
 
       // Start recording
+      console.log('[Audio] Creating and preparing new recording...');
       const newRecording = new Audio.Recording();
       await newRecording.prepareToRecordAsync({
         android: {
@@ -192,26 +206,31 @@ const MainApp = () => {
           bitsPerSecond: 128000,
         },
       });
+      console.log('[Audio] Recording prepared.');
 
       await newRecording.startAsync();
+      console.log('[Audio] Recording started.');
       setRecording(newRecording);
       setIsRecording(true);
       recordingStartTime.current = Date.now();
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      console.error('[Audio] Failed to start recording:', error);
     }
   };
 
   // Function to stop recording and upload
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!recording) {
+      console.log('[Audio] Stop recording called but no recording object exists.');
+      return;
+    }
 
     let recordingUri: string | null = null;
     try {
-      console.log('Attempting to stop and unload recording...');
+      console.log('[Audio] Attempting to stop and unload recording...');
       await recording.stopAndUnloadAsync();
       recordingUri = recording.getURI();
-      console.log('Recording stopped and unloaded successfully. URI:', recordingUri);
+      console.log('[Audio] Recording stopped and unloaded successfully. URI:', recordingUri);
       
       // --- Upload Logic ---
       if (recordingUri) {
@@ -248,7 +267,7 @@ const MainApp = () => {
            console.log('Recording uploaded successfully.');
            
         } catch (uploadError) {
-           console.error('Error during recording upload:', uploadError);
+           console.error('[API] Error during recording upload:', uploadError);
            // Decide if you want to bubble this error up or just log it
         }
       } else {
@@ -258,7 +277,7 @@ const MainApp = () => {
       
     } catch (error) {
       // Error specifically from stopAndUnloadAsync
-      console.error('Failed to stop or unload recording:', error);
+      console.error('[Audio] Failed to stop or unload recording:', error);
     } finally {
       console.log('Resetting recording state.');
       setRecording(null);
@@ -271,9 +290,10 @@ const MainApp = () => {
   const handleMessage = (event: any) => {
     try {
       const message = JSON.parse(event.data);
-      console.log('DataChannel message:', message);
+      console.log('[DataChannel] Received message:', message.type, message); // Log type and full message
 
       if (message.response_id && currentResponseId && message.response_id !== currentResponseId) {
+        console.log(`[DataChannel] Ignoring message for previous response ID: ${message.response_id}`);
         return;
       }
 
@@ -305,6 +325,7 @@ const MainApp = () => {
           break;
 
         case 'response.done':
+          console.log(`[DataChannel] Response done. ID: ${message.response?.id}, Status: ${message.response?.status}`);
           if (message.response.id === currentResponseId) {
             if (message.response.status === 'failed') {
               console.error('Response failed:', message.response.status_details);
@@ -323,17 +344,21 @@ const MainApp = () => {
           break;
 
         case 'transcript':
+          console.log('[DataChannel] Received user transcript');
           setUserTranscript(message.text);
           setIsUserSpeaking(true);
           break;
 
         case 'response.audio_transcript.delta':
+          // Log only occasionally to avoid flooding
+          // if (Math.random() < 0.1) console.log('[DataChannel] Received transcript delta');
           if (!currentResponseId || message.response_id === currentResponseId) {
             setCurrentTranscript(prev => prev + (message.delta || ''));
           }
           break;
 
         case 'response.audio_transcript.done':
+           console.log('[DataChannel] Received full assistant transcript');
           if (!currentResponseId || message.response_id === currentResponseId) {
             const assistantMessage: Message = {
               id: message.response_id || Date.now().toString(),
@@ -354,6 +379,7 @@ const MainApp = () => {
           break;
 
         case 'speech.started':
+           console.log('[DataChannel] Assistant speech started');
           if (!currentResponseId || message.response_id === currentResponseId) {
             //console.log('Model started speaking');
             setIsModelSpeaking(true);
@@ -363,6 +389,7 @@ const MainApp = () => {
           break;
 
         case 'speech.ended':
+          console.log('[DataChannel] Assistant speech ended');
           if (!currentResponseId || message.response_id === currentResponseId) {
             //console.log('Model finished speaking');
             setIsModelSpeaking(false);
@@ -370,20 +397,21 @@ const MainApp = () => {
           break;
 
         case 'session.error':
-          //console.error('Session error:', message.error);
+          console.error('[DataChannel] Session error received:', message.error);
           break;
 
         case 'error':
-          //console.error('Error from server:', message.error);
+          console.error('[DataChannel] Generic error received:', message.error);
           break;
 
         case 'text':
+          console.log('[DataChannel] Received text message (not used currently)');
           // This case is not used in the current implementation
           break;
 
         case 'session.created':
         case 'session.updated':
-          //console.log(`Session ${message.type}:`, message.session.id);
+          console.log(`[DataChannel] Session ${message.type}:`, message.session?.id);
           break;
 
         case 'response.audio.done':
@@ -391,26 +419,31 @@ const MainApp = () => {
         case 'response.output_item.done':
         case 'output_audio_buffer.stopped':
           // These events indicate different stages of response completion
-          //console.log(`Received ${message.type} event`);
+          console.log(`[DataChannel] Received ${message.type} event`);
           break;
 
         default:
-          //console.log('Unhandled message type:', message.type);
+          console.warn('[DataChannel] Unhandled message type:', message.type);
       }
     } catch (error) {
-      console.error('Error parsing message:', error);
+      console.error('[DataChannel] Error parsing message:', error, 'Raw data:', event.data);
     }
   };
 
 
   function handleSessionUpdate(systemPrompt: string) {
+    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
+       console.warn('[DataChannel] Cannot update session, channel not open.');
+       return;
+    }
+    console.log('[DataChannel] Sending session.update with new system prompt...');
     const sessionUpdate = {
       type: 'session.update',
       session: {
         input_audio_transcription: {
           model: "whisper-1",
           language: "tr", // Specify Turkish for improved transcription accuracy
-          prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe’nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin “hipertansiyon”, “diyabet”, “anestezi”, “patoloji” vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse “[anlaşılmadı]” etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
+          prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe'nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin "hipertansiyon", "diyabet", "anestezi", "patoloji" vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse "[anlaşılmadı]" etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
 
         },
         input_audio_format: 'pcm16',
@@ -424,15 +457,20 @@ const MainApp = () => {
 
   // Function to initialize the connection (called when "Enable" button is pressed)
   async function init() {
+    console.log('[Init] Starting initialization...');
     try {
       if (!session?.access_token) {
+        console.error('[Init] No access token found.');
         throw new Error('No access token available. Please log in again.');
       }
+      console.log('[Init] Access token found.');
 
       // Start recording
+      console.log('[Init] Calling startRecording...');
       await startRecording();
+      console.log('[Init] startRecording finished.');
 
-      //console.log('Requesting session token...');
+      console.log('[API] Requesting session token from server...');
       // Get an ephemeral key from your server
       const tokenResponse = await fetch(`${API_URL}/session`, {
         headers: {
@@ -453,9 +491,10 @@ const MainApp = () => {
         throw new Error('Session response missing client secret value');
       }
 
-      console.log('[Auth] Successfully obtained session token');
+      console.log('[API] Successfully obtained session token.');
       const EPHEMERAL_KEY = data.client_secret.value;
 
+      console.log('[WebRTC] Creating PeerConnection...');
       // Create a new peer connection with enhanced STUN/TURN configuration
       const pc = new RTCPeerConnection({
         iceServers: [
@@ -463,13 +502,16 @@ const MainApp = () => {
         ]
       });
       pcRef.current = pc;
+      console.log('[WebRTC] PeerConnection created.');
 
+      console.log('[WebRTC] Creating DataChannel...');
       // Set up data channel first
       const dc = pc.createDataChannel('oai-events');
       dataChannelRef.current = dc;
+      console.log('[WebRTC] DataChannel created.');
 
       dc.addEventListener('open', () => {
-        //console.log('Data channel opened');
+        console.log('[DataChannel] Channel opened.');
         // Send initial session update to configure audio
         if (dc.readyState === 'open') {
           // Set conversation mode as default and update session
@@ -478,10 +520,17 @@ const MainApp = () => {
       });
 
       dc.addEventListener('message', handleMessage);
+      dc.addEventListener('error', (event: any) => {
+         console.error('[DataChannel] Error:', event.error);
+      });
+       dc.addEventListener('close', () => {
+         console.log('[DataChannel] Channel closed.');
+      });
+
 
       // Handle remote stream: store it in state when received
       pc.addEventListener('track', (event: any) => {
-        console.log('[WebRTC] Received track:', event.track.kind);
+        console.log('[WebRTC] Received remote track:', event.track.kind);
         if (event.streams && event.streams[0]) {
           //console.log('Remote stream received:', event.streams[0]);
           
@@ -504,7 +553,7 @@ const MainApp = () => {
           if (audioTracks.length > 0) {
             const track = audioTracks[0];
             track.enabled = true;
-            newStream.addTrack(track);
+            newStream.addTrack(track as any);
             console.log('[WebRTC] Added audio track to new stream:', {
               label: track.label,
               enabled: track.enabled,
@@ -516,9 +565,20 @@ const MainApp = () => {
         }
       });
 
+      pc.addEventListener('connectionstatechange', () => {
+         console.log(`[WebRTC] Connection state changed: ${pcRef.current?.connectionState}`);
+      });
+       pc.addEventListener('iceconnectionstatechange', () => {
+         console.log(`[WebRTC] ICE Connection state changed: ${pcRef.current?.iceConnectionState}`);
+       });
+       pc.addEventListener('icegatheringstatechange', () => {
+         console.log(`[WebRTC] ICE Gathering state changed: ${pcRef.current?.iceGatheringState}`);
+       });
+
+
       // Get local audio from the device's microphone
       try {
-        console.log('[WebRTC] Requesting microphone access...');
+        console.log('[Media] Requesting microphone access...');
         const constraints = {
           audio: {
             sampleRate: 16000,
@@ -529,11 +589,11 @@ const MainApp = () => {
           },
           video: false
         };
-        console.log('[WebRTC] Audio constraints:', constraints);
+        console.log('[Media] Audio constraints:', constraints);
         
         // Stop any existing local stream before creating a new one
         if (localStreamRef.current) {
-          console.log('[WebRTC] Stopping existing local stream');
+          console.log('[Media] Stopping existing local stream');
           localStreamRef.current.getTracks().forEach(track => {
             track.stop();
             track.enabled = false;
@@ -542,7 +602,7 @@ const MainApp = () => {
         }
         
         const localStream = await mediaDevices.getUserMedia(constraints as any);
-        console.log('[WebRTC] Microphone access granted, tracks:', 
+        console.log('[Media] Microphone access granted, tracks:', 
           localStream.getTracks().map(t => ({
             kind: t.kind,
             label: t.label,
@@ -557,7 +617,7 @@ const MainApp = () => {
         if (audioTracks.length > 0) {
           audioTracks[0].enabled = true;
           pc.addTrack(audioTracks[0], localStream);
-          console.log('[WebRTC] Added audio track to peer connection:', {
+          console.log('[Media] Added audio track to peer connection:', {
             label: audioTracks[0].label,
             enabled: audioTracks[0].enabled
           });
@@ -566,7 +626,7 @@ const MainApp = () => {
           audioTracks.slice(1).forEach(track => {
             track.enabled = false;
             track.stop();
-            console.log('[WebRTC] Disabled additional audio track:', track.label);
+            console.log('[Media] Disabled additional audio track:', track.label);
           });
         }
 
@@ -580,14 +640,14 @@ const MainApp = () => {
           }
         };
         dc.send(JSON.stringify(audioBuffer));
-        console.log('[WebRTC] Sent initial audio buffer configuration');
+        console.log('[Media] Sent initial audio buffer configuration');
       } catch (error) {
-        console.error('[WebRTC] Error accessing microphone:', error);
-        return;
+        console.error('[Media] Error accessing microphone:', error);
+        throw error; // Rethrow to trigger cleanup in outer catch
       }
 
       // Create an SDP offer and set it as the local description
-      console.log('[WebRTC] Creating offer...');
+      console.log('[WebRTC] Creating SDP offer...');
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false
@@ -598,8 +658,9 @@ const MainApp = () => {
       });
       
       await pc.setLocalDescription(offer);
-      console.log('[WebRTC] Set local description');
+      console.log('[WebRTC] Set local description.');
 
+      console.log('[API] Sending SDP offer to server...');
       // Send the offer's SDP to our server endpoint
       const model = 'gpt-4o-realtime-preview-2024-12-17';
       const sdpResponse = await fetch(`${API_URL}/realtime?model=${model}`, {
@@ -612,35 +673,47 @@ const MainApp = () => {
       });
 
       if (!sdpResponse.ok) {
+        const errorText = await sdpResponse.text();
+        console.error(`[API] SDP offer request failed. Status: ${sdpResponse.status}, Body: ${errorText}`);
         throw new Error(`HTTP error! status: ${sdpResponse.status}`);
       }
+      console.log('[API] SDP offer sent successfully.');
 
       // Parse the SDP answer and set it as the remote description
+      console.log('[WebRTC] Setting remote SDP answer...');
       const answer = {
         type: 'answer' as RTCSdpType,
         sdp: await sdpResponse.text(),
       };
       await pc.setRemoteDescription(answer);
+      console.log('[WebRTC] Set remote description.');
 
       // Add ICE candidate handler
       pc.addEventListener('icecandidate', (event: any) => {
         if (event.candidate) {
-          //console.log('New ICE candidate:', event.candidate);
+          // console.log('[WebRTC] New ICE candidate found:', event.candidate);
+        } else {
+          console.log('[WebRTC] All ICE candidates have been gathered.');
         }
       });
 
       // Update state to indicate that the session is started
       setIsStarted(true);
+      console.log('[Init] Initialization successful and session started.');
+
     } catch (error) {
-      //console.error('Error during initialization:', error);
+      console.error('[Init] Error during initialization:', error);
       stop(); // Clean up if initialization fails
     }
   }
 
   // Function to stop the session
   async function stop() {
+    console.log('[Stop] Stopping session...');
     // Stop recording
+    console.log('[Stop] Calling stopRecording...');
     await stopRecording();
+    console.log('[Stop] stopRecording finished.');
     
     // Stop and remove all remote stream tracks
     if (remoteStream) {
@@ -650,6 +723,9 @@ const MainApp = () => {
         remoteStream.removeTrack(track);
       });
       setRemoteStream(null);
+      console.log('[Stop] Remote stream stopped and removed.');
+    } else {
+       console.log('[Stop] No remote stream to stop.');
     }
     
     // Stop and remove all local stream tracks
@@ -660,21 +736,33 @@ const MainApp = () => {
         localStreamRef.current?.removeTrack(track);
       });
       localStreamRef.current = null;
+      console.log('[Stop] Local stream stopped and removed.');
+    } else {
+       console.log('[Stop] No local stream to stop.');
     }
     
     // Close data channel
     if (dataChannelRef.current) {
+      console.log('[Stop] Closing DataChannel...');
       dataChannelRef.current.close();
       dataChannelRef.current = null;
+      console.log('[Stop] DataChannel closed.');
+    } else {
+       console.log('[Stop] No DataChannel to close.');
     }
-    
+
     // Close peer connection
     if (pcRef.current) {
+      console.log('[Stop] Closing PeerConnection...');
       pcRef.current.close();
       pcRef.current = null;
+      console.log('[Stop] PeerConnection closed.');
+    } else {
+       console.log('[Stop] No PeerConnection to close.');
     }
-    
+
     // Reset all states
+    console.log('[Stop] Resetting application state.');
     setIsStarted(false);
     setCurrentTranscript('');
     setUserTranscript('');
@@ -858,6 +946,7 @@ const AppContent = () => {
 
     // Handle the initial URL that may have opened the app
     const getInitialURL = async () => {
+      console.log('[DeepLink] Checking for initial URL...');
       const initialUrl = await Linking.getInitialURL();
       if (initialUrl) {
         console.log('Initial URL:', initialUrl);
@@ -878,6 +967,7 @@ const AppContent = () => {
   }, [handleDeepLink]);
 
   if (loading) {
+    console.log('[App] Auth loading...');
     return (
       <View style={styles.container}>
         <Text>Loading...</Text>
@@ -885,6 +975,7 @@ const AppContent = () => {
     );
   }
 
+  console.log('[App] Rendering MainApp or LoginScreen. User:', !!user);
   return user ? <MainApp /> : <LoginScreen />;
 };
 
