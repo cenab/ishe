@@ -14,6 +14,7 @@ ishe/
 └── package.json               # Project configuration
 ```
 
+
 ## Prerequisites
 
 - Node.js (v16 or higher)
