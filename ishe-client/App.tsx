@@ -19,10 +19,6 @@ import {
   MediaStream,
   MediaStreamTrack,
   RTCView,
-  RTCSdpType,
-  RTCDataChannelEvent,
-  RTCTrackEvent,
-  RTCPeerConnectionIceEvent,
   MediaStreamTrack as WebRTCMediaStreamTrack
 } from 'react-native-webrtc';
 import { Audio } from 'expo-av';
@@ -443,7 +439,7 @@ const MainApp = () => {
         input_audio_transcription: {
           model: "whisper-1",
           language: "tr", // Specify Turkish for improved transcription accuracy
-          prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe'nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin "hipertansiyon", "diyabet", "anestezi", "patoloji" vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse "[anlaşılmadı]" etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
+          prompt: `Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe'nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin "hipertansiyon", "diyabet", "anestezi", "patoloji" vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse "[anlaşılmadı]" etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir.`
 
         },
         input_audio_format: 'pcm16',
