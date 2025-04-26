@@ -71,6 +71,8 @@ jobs:
         working-directory: ./ishe-client
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             echo "EXPO_TOKEN not set, using local build method"
@@ -90,7 +92,7 @@ jobs:
           else
             echo "EXPO_TOKEN available, using EAS build service"
             # Use non-interactive mode to start the build
-            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk --env-file .env
+            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk
             # Check if build was successful
             if [ ! -f "./build/ishe.apk" ]; then
               echo "EAS build did not produce an APK. Building locally as fallback..."
