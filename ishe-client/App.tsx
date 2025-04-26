@@ -29,9 +29,9 @@ import { generateSystemPromptToConverse, generateSystemPromptToAskQuestions } fr
 
 // Define the API URL based on platform
 const API_URL = Platform.select({
-  android: 'https://3.127.58.246',
-  ios: 'https://3.127.58.246',
-  default: 'https://3.127.58.246',
+  android: 'https://ishe.batubora.com',
+  ios: 'https://ishe.batubora.com',
+  default: 'https://ishe.batubora.com',
 });
 
 // Add a new type for messages
