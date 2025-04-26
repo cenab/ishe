@@ -43,11 +43,11 @@ jobs:
             mkdir -p build
             echo "Building local release APK..."
             # Ensure the keystore directory exists
-            mkdir -p ../keystore
+            mkdir -p ../util/keystore
             # Copy the keystore file if it doesn't exist (from the source repo)
-            if [ ! -f "../keystore/ishe-release-key.keystore" ]; then
+            if [ ! -f "../util/keystore/ishe-release-key.keystore" ]; then
               echo "Copying keystore from source..."
-              cp $GITHUB_WORKSPACE/keystore/ishe-release-key.keystore ../keystore/
+              cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
             fi
             npx expo prebuild --platform android
             cd android
@@ -104,7 +104,7 @@ jobs:
           scp ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
           
           # Copy keystore to server
-          scp ./keystore/ishe-release-key.keystore $EC2_USER@$EC2_HOST:~/ishe-release-key.keystore
+          scp ./util/keystore/ishe-release-key.keystore $EC2_USER@$EC2_HOST:~/ishe-release-key.keystore
           
           # Move files to the right directories and set permissions
           ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore" 
