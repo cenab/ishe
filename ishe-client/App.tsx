@@ -149,6 +149,12 @@ const MainApp = () => {
 
   // Function to start recording
   const startRecording = async () => {
+    // Prevent starting if already recording
+    if (isRecording || recording) {
+      console.log('Recording is already in progress. Skipping start.');
+      return;
+    }
+
     try {
       // Request permissions
       const permission = await Audio.requestPermissionsAsync();
@@ -200,38 +206,61 @@ const MainApp = () => {
   const stopRecording = async () => {
     if (!recording) return;
 
+    let recordingUri: string | null = null;
     try {
+      console.log('Attempting to stop and unload recording...');
       await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      const duration = Date.now() - (recordingStartTime.current || 0);
+      recordingUri = recording.getURI();
+      console.log('Recording stopped and unloaded successfully. URI:', recordingUri);
       
-      if (uri) {
-        // Create form data for upload
-        const formData = new FormData();
-        formData.append('audio', {
-          uri,
-          type: 'audio/wav',
-          name: 'recording.wav',
-        } as any);
-        formData.append('duration', duration.toString());
-        formData.append('timestamp', new Date().toISOString());
+      // --- Upload Logic ---
+      if (recordingUri) {
+        const duration = Date.now() - (recordingStartTime.current || 0);
+        console.log(`Recording duration: ${duration}ms`);
+        
+        try {
+          // Create form data for upload
+          const formData = new FormData();
+          formData.append('audio', {
+            uri: recordingUri,
+            name: 'recording.wav',
+            type: 'audio/wav', // MIME type
+          } as any); // The 'as any' is often needed due to typing differences
+          formData.append('duration', duration.toString());
+          formData.append('timestamp', new Date().toISOString());
 
-        // Upload the recording
-        const response = await fetch(`${API_URL}/api/audio/upload`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-          },
-          body: formData,
-        });
+          console.log('Uploading recording...');
+          // Upload the recording
+          const response = await fetch(`${API_URL}/api/audio/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              // Content-Type is set automatically by fetch for FormData
+            },
+            body: formData,
+          });
 
-        if (!response.ok) {
-          throw new Error('Failed to upload recording');
+          if (!response.ok) {
+             const errorText = await response.text();
+             console.error(`Failed to upload recording. Status: ${response.status}, Body: ${errorText}`);
+             throw new Error(`Failed to upload recording: ${response.status}`);
+          }
+           console.log('Recording uploaded successfully.');
+           
+        } catch (uploadError) {
+           console.error('Error during recording upload:', uploadError);
+           // Decide if you want to bubble this error up or just log it
         }
+      } else {
+         console.warn('No recording URI found after stopping.');
       }
+      // --- End Upload Logic ---
+      
     } catch (error) {
-      console.error('Failed to stop recording:', error);
+      // Error specifically from stopAndUnloadAsync
+      console.error('Failed to stop or unload recording:', error);
     } finally {
+      console.log('Resetting recording state.');
       setRecording(null);
       setIsRecording(false);
       recordingStartTime.current = null;
@@ -1039,3 +1068,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
+

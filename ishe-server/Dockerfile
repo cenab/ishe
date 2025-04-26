@@ -2,6 +2,14 @@ FROM node:20
 
 WORKDIR /app
 
+# Install build tools required for native modules (like onnxruntime-node)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy package.json and package-lock.json first to leverage Docker cache
 COPY package*.json ./
 
