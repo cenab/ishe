@@ -50,6 +50,18 @@ jobs:
             fi
           fi
           cat eas.json
+      
+      - name: Create environment file
+        working-directory: ./ishe-client
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          echo "Creating .env file with required environment variables"
+          echo "SUPABASE_URL=$SUPABASE_URL" > .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
+          echo "Environment file created:"
+          cat .env | grep -v "KEY"
         
       - name: Install dependencies
         working-directory: ./ishe-client
@@ -71,14 +83,14 @@ jobs:
               echo "Copying keystore from source..."
               cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
             fi
-            npx expo prebuild --platform android
+            npx expo prebuild --platform android --env-file .env
             cd android
             ./gradlew assembleRelease
             cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
           else
             echo "EXPO_TOKEN available, using EAS build service"
             # Use non-interactive mode to start the build
-            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk
+            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk --env-file .env
             # Check if build was successful
             if [ ! -f "./build/ishe.apk" ]; then
               echo "EAS build did not produce an APK. Building locally as fallback..."
@@ -90,7 +102,7 @@ jobs:
                 echo "Copying keystore from source..."
                 cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
               fi
-              npx expo prebuild --platform android
+              npx expo prebuild --platform android --env-file .env
               cd android
               ./gradlew assembleRelease
               cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
