@@ -1,79 +1,70 @@
-name: Build and Deploy Android APK
-
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
     paths:
       - 'ishe-client/**'
       - '.github/workflows/build-apk.yml'
-      - 'util/keystore/**'
   workflow_dispatch:
+    # Allows manual triggering from GitHub Actions tab
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
-          fetch-depth: 0
-
-      # 2. Cache Node modules
-      - name: Cache npm
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      # 3. Setup Node
+          fetch-depth: 0  # Fetch all history and tags
+      
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v2
         with:
           node-version: '18'
-          cache: 'npm'
-
-      # 4. Cache Gradle
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*','**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      # 5. Setup Java
+          
       - name: Setup Java JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v1
         with:
-          distribution: 'temurin'
           java-version: '17'
-          cache: gradle
-
-      # 6. Expo & EAS CLI
-      - name: Install Expo & EAS CLI
+          
+      - name: Install Expo CLI
         run: npm install -g expo-cli eas-cli
-
-      # 7. (Optional) Ensure your baseline eas.json is committed; remove dynamic creation
-
-      # 8. Create .env
+        
+      - name: Configure EAS for APK Build
+        run: |
+          cd ./ishe-client
+          if [ ! -f "eas.json" ]; then
+            echo '{"cli":{"version":">= 5.0.0"},"build":{"preview":{"android":{"buildType":"apk"}},"production":{"autoIncrement":true}}}' > eas.json
+          else
+            echo 'Updating existing eas.json'
+            # Try to use jq if available
+            if command -v jq &> /dev/null; then
+              jq '.build.preview.android.buildType = "apk"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+            else
+              # Simple grep check to avoid duplicate entries
+              if ! grep -q '"buildType"' eas.json; then
+                # Very basic sed replacement - might not work for all JSON structures
+                sed -i 's/"preview"[ ]*:[ ]*{/"preview":{"android":{"buildType":"apk"},/g' eas.json || echo "Failed to update eas.json, continuing anyway"
+              fi
+            fi
+          fi
+          cat eas.json
+      
       - name: Create environment file
         working-directory: ./ishe-client
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
-          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
-
-      # 9. Install JS deps
+          echo "Creating .env file with required environment variables"
+          echo "SUPABASE_URL=$SUPABASE_URL" > .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
+          echo "Environment file created:"
+          cat .env | grep -v "KEY"
+        
       - name: Install dependencies
         working-directory: ./ishe-client
         run: npm install
-
-      # 10. Build APK (local vs. EAS)
+        
       - name: Build APK
         working-directory: ./ishe-client
         env:
@@ -82,46 +73,77 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "🔨 Local build"
+            echo "EXPO_TOKEN not set, using local build method"
             mkdir -p build
-            mkdir -p android/app/keystores
-            cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore android/app/keystores/
+            echo "Building local release APK..."
+            # Ensure the keystore directory exists
+            mkdir -p ../util/keystore
+            # Copy the keystore file if it doesn't exist (from the source repo)
+            if [ ! -f "../util/keystore/ishe-release-key.keystore" ]; then
+              echo "Copying keystore from source..."
+              cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
+            fi
             npx expo prebuild --platform android --env-file .env
             cd android
             ./gradlew assembleRelease
             cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
           else
-            echo "☁️  Cloud EAS build"
-            eas build --platform android --profile preview --non-interactive --output-dir ./build
+            echo "EXPO_TOKEN available, using EAS build service"
+            # Use non-interactive mode to start the build
+            eas build --platform android --profile preview --non-interactive --local --output=./build/ishe.apk
+            # Check if build was successful
+            if [ ! -f "./build/ishe.apk" ]; then
+              echo "EAS build did not produce an APK. Building locally as fallback..."
+              mkdir -p build
+              # Ensure the keystore directory exists
+              mkdir -p ../util/keystore
+              # Copy the keystore file if it doesn't exist (from the source repo)
+              if [ ! -f "../util/keystore/ishe-release-key.keystore" ]; then
+                echo "Copying keystore from source..."
+                cp $GITHUB_WORKSPACE/util/keystore/ishe-release-key.keystore ../util/keystore/
+              fi
+              npx expo prebuild --platform android --env-file .env
+              cd android
+              ./gradlew assembleRelease
+              cp app/build/outputs/apk/release/app-release.apk ../build/ishe.apk
+            fi
           fi
-
-      # 11. SSH agent
+        
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      # 12. Deploy to EC2
+          
       - name: Deploy APK and keystore to EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: 3.127.58.246
+          EC2_USER: ec2-user
         run: |
+          # Ensure SSH host key is recognized
           mkdir -p ~/.ssh
-          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
-
+          ssh-keyscan $EC2_HOST >> ~/.ssh/known_hosts
+          
+          # Verify APK exists before uploading
+          echo "Checking APK before upload..."
           ls -la ./ishe-client/build/
           file ./ishe-client/build/ishe.apk
-
-          ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/downloads /var/www/keystore"
-
+          
+          # Create downloads directory on server if it doesn't exist
+          ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/downloads"
+          
+          # Create keystore directory on server if it doesn't exist
+          ssh $EC2_USER@$EC2_HOST "sudo mkdir -p /var/www/keystore"
+          
+          # Copy APK to server
+          echo "Uploading APK to server..."
           scp -v ./ishe-client/build/ishe.apk $EC2_USER@$EC2_HOST:~/ishe.apk
+          
+          # Copy keystore to server
           scp ./util/keystore/ishe-release-key.keystore $EC2_USER@$EC2_HOST:~/ishe-release-key.keystore
-
-          ssh $EC2_USER@$EC2_HOST << 'EOF'
-            sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo chown nginx:nginx /var/www/downloads/ishe.apk
-            sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore
-            ls -la /var/www/downloads/
-          EOF
-
-          curl -I http://$EC2_HOST/downloads/ishe.apk
+          
+          # Move files to the right directories and set permissions
+          ssh $EC2_USER@$EC2_HOST "sudo mv ~/ishe.apk /var/www/downloads/ && sudo chmod 644 /var/www/downloads/ishe.apk && sudo chown nginx:nginx /var/www/downloads/ishe.apk && sudo mv ~/ishe-release-key.keystore /var/www/keystore/ && sudo chmod 644 /var/www/keystore/ishe-release-key.keystore && sudo ls -la /var/www/downloads/"
+          
+          # Verify the API is downloadable
+          echo "Testing APK URL..."
+          curl -I http://$EC2_HOST/ishe.apk 
