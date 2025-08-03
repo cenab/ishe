@@ -7,7 +7,6 @@
     "icon": "./assets/ishe.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "developmentClient": true,
     "splash": {
       "image": "./assets/ishe.png",
       "resizeMode": "contain",

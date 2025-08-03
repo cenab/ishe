@@ -7,8 +7,8 @@ type AuthContextType = {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signIn: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   handleDeepLink: (url: string) => Promise<void>;
 };
@@ -111,10 +111,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throw error;
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, name: string) => {
     console.log('Attempting sign in for:', email);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -122,6 +122,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handleAuthError(error, 'sign in');
       } else {
         console.log('Sign in successful');
+        
+        // Update user metadata with name if provided and not already set
+        if (data.user && name) {
+          const currentName = data.user.user_metadata?.name;
+          
+          // Only update if name is not already set or if the new name is different
+          if (!currentName || currentName !== name) {
+            console.log('Updating user metadata with name:', name);
+            const { error: updateError } = await supabase.auth.updateUser({
+              data: { name: name }
+            });
+            
+            if (updateError) {
+              console.error('Error updating user metadata:', updateError);
+              // Don't throw error here, just log it as the login was successful
+            } else {
+              console.log('User metadata updated successfully');
+              // Refresh the session to get updated user metadata
+              await supabase.auth.refreshSession();
+            }
+          } else {
+            console.log('User already has name set:', currentName);
+          }
+        }
       }
     } catch (error) {
       console.error('Unexpected error during sign in:', error);
@@ -129,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string) => {
     console.log('Attempting sign up for:', email);
     try {
       // Define a custom redirect URL using our URL scheme
@@ -145,9 +169,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         password,
         options: {
-          data: {
-            name: name,
-          },
           emailRedirectTo: redirectUrl
         }
       });

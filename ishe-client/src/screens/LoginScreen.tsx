@@ -29,7 +29,7 @@ export const LoginScreen = () => {
       return;
     }
 
-    if (isSignUp && !name) {
+    if (!isSignUp && !name) {
       setError('Lütfen adınızı giriniz');
       return;
     }
@@ -39,10 +39,10 @@ export const LoginScreen = () => {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, name);
+        await signUp(email, password);
         setError('Doğrulama için lütfen e-postanızı kontrol ediniz');
       } else {
-        await signIn(email, password);
+        await signIn(email, password, name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Giriş yapılamadı');
@@ -54,9 +54,7 @@ export const LoginScreen = () => {
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
     setError('');
-    if (!isSignUp) {
-      setName('');
-    }
+    setName('');
   };
 
   return (
@@ -73,11 +71,11 @@ export const LoginScreen = () => {
               resizeMode="cover"
             />
             <Text style={styles.title}>Merhaba, Ben iShe</Text>
-            <Text style={styles.subtitle}>{isSignUp ? 'Benimle konuşmak için hesap oluşturun' : 'Benimle konuşmak için giriş yapın'}</Text>
+            <Text style={styles.subtitle}>{isSignUp ? 'Benimle konuşmak için hesap oluşturun' : 'Benimle konuşmak için adınız ve bilgilerinizle giriş yapın'}</Text>
           </View>
 
           <View style={styles.form}>
-            {isSignUp && (
+            {!isSignUp && (
               <View style={styles.inputContainer}>
                 <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
                 <TextInput

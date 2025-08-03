@@ -17,17 +17,26 @@ import {
   RTCPeerConnection,
   mediaDevices,
   MediaStream,
-  MediaStreamTrack,
-  RTCView,
   MediaStreamTrack as WebRTCMediaStreamTrack
 } from 'react-native-webrtc';
 import { Audio } from 'expo-av';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Ionicons } from '@expo/vector-icons';
-import { generateSystemPromptToConverse, generateSystemPromptToAskQuestions } from './src/utils/systemPrompt';
+import { generateSystemPromptToAskQuestions } from './src/utils/systemPrompt';
 
 // Define the API URL based on platform
+// For local development:
+// - iOS simulator: use 'localhost' or '127.0.0.1'
+// - Android emulator: use '10.0.2.2' (special alias for host machine's localhost)
+// - Physical devices: use your machine's actual IP address (e.g., '192.168.1.100')
+// const API_URL = Platform.select({
+//   android: 'http://10.0.2.2:3000', // Android emulator
+//   ios: 'http://localhost:3000',     // iOS simulator
+//   default: 'http://localhost:3000',
+// });
+
+// For production use:
 const API_URL = Platform.select({
   android: 'https://ishe.batubora.com',
   ios: 'https://ishe.batubora.com',
@@ -43,7 +52,7 @@ type Message = {
 };
 
 const MainApp = () => {
-  const { user, session, signOut } = useAuth();
+  const { user, session } = useAuth();
   // State to track whether the session is started and to hold the remote stream
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -56,7 +65,6 @@ const MainApp = () => {
   // Add new state for conversation context and system prompt
   const [conversationContext, setConversationContext] = useState<string>('');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
-  const [promptType, setPromptType] = useState<'conversation' | 'questions'>('conversation');
   
   // Add new state for temporary user input
   const [tempUserInput, setTempUserInput] = useState<string[]>([]);
@@ -80,25 +88,12 @@ const MainApp = () => {
   // Add ref for auto-scrolling
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Add new function to handle prompt type change
-  const handlePromptTypeChange = (type: 'conversation' | 'questions') => {
-    const userName = user?.user_metadata?.name || 'Değerli Kullanıcı';
-    setPromptType(type);
-    const newPrompt = type === 'conversation' 
-      ? generateSystemPromptToConverse(userName, conversationContext)
-      : generateSystemPromptToAskQuestions(userName, conversationContext);
-    setSystemPrompt(newPrompt);
-    handleSessionUpdate(newPrompt);
-  };
-
-  // Update the useEffect to use the correct prompt type
+  // Update the useEffect to always use questions prompt
   useEffect(() => {
     const userName = user?.user_metadata?.name || 'Değerli Kullanıcı';
-    const newPrompt = promptType === 'conversation'
-      ? generateSystemPromptToConverse(userName, conversationContext)
-      : generateSystemPromptToAskQuestions(userName, conversationContext);
+    const newPrompt = generateSystemPromptToAskQuestions(userName, conversationContext);
     setSystemPrompt(newPrompt);
-  }, [user, conversationContext, promptType]);
+  }, [user, conversationContext]);
 
   // Function to send a response request to the model
   const sendResponseRequest = () => {
@@ -296,7 +291,7 @@ const MainApp = () => {
       switch (message.type) {
         case 'conversation.item.input_audio_transcription.completed':
           // Add the transcript to temporary input array
-          setTempUserInput(prev => [...prev, message.transcript.trim()]);
+          setTempUserInput((prev: string[]) => [...prev, message.transcript.trim()]);
           break;
 
         case 'response.created':
@@ -304,7 +299,7 @@ const MainApp = () => {
           // Join all temporary inputs and create a single message
           if (tempUserInput.length > 0) {
             const completeUserInput = tempUserInput.join(' ');
-            setMessages(prev => [...prev, {
+            setMessages((prev: Message[]) => [...prev, {
               id: Date.now().toString(),
               role: 'user',
               text: completeUserInput,
@@ -349,7 +344,7 @@ const MainApp = () => {
           // Log only occasionally to avoid flooding
           // if (Math.random() < 0.1) console.log('[DataChannel] Received transcript delta');
           if (!currentResponseId || message.response_id === currentResponseId) {
-            setCurrentTranscript(prev => prev + (message.delta || ''));
+            setCurrentTranscript((prev: string) => prev + (message.delta || ''));
           }
           break;
 
@@ -362,7 +357,7 @@ const MainApp = () => {
               text: message.transcript,
               timestamp: new Date()
             };
-            setMessages(prev => [...prev, assistantMessage]);
+            setMessages((prev: Message[]) => [...prev, assistantMessage]);
             // Store assistant's complete response
             storeConversation(message.transcript, {
               type: 'assistant_response',
@@ -510,8 +505,11 @@ const MainApp = () => {
         console.log('[DataChannel] Channel opened.');
         // Send initial session update to configure audio
         if (dc.readyState === 'open') {
-          // Set conversation mode as default and update session
-          handlePromptTypeChange('conversation');
+          // Set questions mode and update session
+          const userName = user?.user_metadata?.name || 'Değerli Kullanıcı';
+          const newPrompt = generateSystemPromptToAskQuestions(userName, conversationContext);
+          setSystemPrompt(newPrompt);
+          handleSessionUpdate(newPrompt);
         }
       });
 
@@ -534,7 +532,7 @@ const MainApp = () => {
           if (remoteStream) {
             console.log('[WebRTC] Stopping existing remote stream');
             const tracks = remoteStream.getTracks();
-            tracks.forEach(track => {
+            tracks.forEach((track: MediaStreamTrack) => {
               track.stop();
               remoteStream.removeTrack(track);
             });
@@ -782,38 +780,7 @@ const MainApp = () => {
             />
             <Text style={styles.headerTitle}>iShe</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.signOutButton} 
-            onPress={signOut}
-          >
-            <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
-          </TouchableOpacity>
         </View>
-
-        {isStarted && (
-          <View style={styles.promptTypeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.promptTypeButton,
-                promptType === 'conversation' && styles.promptTypeButtonActive,
-                { backgroundColor: '#007AFF' }
-              ]}
-              onPress={() => handlePromptTypeChange('conversation')}
-            >
-              <Text style={styles.promptTypeButtonText}>Sohbet Modu</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.promptTypeButton,
-                promptType === 'questions' && styles.promptTypeButtonActive,
-                { backgroundColor: '#FF9500' }
-              ]}
-              onPress={() => handlePromptTypeChange('questions')}
-            >
-              <Text style={styles.promptTypeButtonText}>Soru Modu</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         <ScrollView 
           ref={scrollViewRef}
@@ -1015,9 +982,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000000',
   },
-  signOutButton: {
-    padding: 8,
-  },
   conversationContainer: {
     flex: 1,
   },
@@ -1128,30 +1092,5 @@ const styles = StyleSheet.create({
   progressBar: {
     height: '100%',
     backgroundColor: 'white',
-  },
-  promptTypeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    padding: 8,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  promptTypeButton: {
-    padding: 12,
-    borderRadius: 8,
-    marginHorizontal: 4,
-    flex: 1,
-    maxWidth: 150,
-    alignItems: 'center',
-  },
-  promptTypeButtonActive: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  promptTypeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });
