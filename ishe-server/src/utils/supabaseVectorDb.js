@@ -77,13 +77,15 @@ class SupabaseVectorDatabase {
 
       console.log('Formatted metadata:', cleanMetadata);
 
-      // Check if this is a response to a previous message
-      if (cleanMetadata.responseId) {
-        // Update the existing conversation with the response
+      // Check if this is a response to a previous message and avoid inserting duplicates
+      // Only skip when both responseId AND type match an existing row, so we can store
+      // two rows (user_input and assistant_response) for the same responseId.
+      if (cleanMetadata.responseId && cleanMetadata.type) {
         const { data: existingData, error: existingError } = await this.supabase
           .from(this.tableName)
           .select('*')
           .eq('metadata->>responseId', cleanMetadata.responseId)
+          .eq('metadata->>type', cleanMetadata.type)
           .single();
 
         if (existingError && existingError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
@@ -91,8 +93,11 @@ class SupabaseVectorDatabase {
         }
 
         if (existingData) {
-          console.log('Skipping duplicate response:', cleanMetadata.responseId);
-          return; // Skip adding duplicate response
+          console.log('Skipping duplicate insert for', {
+            responseId: cleanMetadata.responseId,
+            type: cleanMetadata.type
+          });
+          return; // Skip adding exact duplicate
         }
       }
 

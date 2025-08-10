@@ -61,7 +61,7 @@ app.post("/realtime", verifySupabaseToken, express.raw({ type: 'application/sdp'
     }
 
     const sdp = req.body.toString();
-    const model = req.query.model || 'gpt-4o-realtime-preview-2024-12-17';
+    const model = req.query.model || 'gpt-4o-realtime-preview-2025-06-03';
 
     if (!sdp) {
       return res.status(400).json({ error: 'SDP offer is required' });
@@ -222,7 +222,7 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-12-17",
+        model: "gpt-4o-realtime-preview-2025-06-03",
         modalities: ["audio", "text"],
         instructions: systemPrompt,
         voice: "alloy",

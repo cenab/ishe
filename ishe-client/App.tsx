@@ -68,6 +68,8 @@ const MainApp = () => {
   
   // Add new state for temporary user input
   const [tempUserInput, setTempUserInput] = useState<string[]>([]);
+  // Map responseId -> complete user input for pairing with assistant response
+  const [responseUserInputs, setResponseUserInputs] = useState<Record<string, string>>({});
   
   // Add new state and ref for audio recording
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -305,9 +307,13 @@ const MainApp = () => {
               text: completeUserInput,
               timestamp: new Date()
             }]);
-            // Store user's input immediately
+            // Keep mapping from responseId -> user input to pair neatly later
+            const respId = message.response.id;
+            setResponseUserInputs(prev => ({ ...prev, [respId]: completeUserInput }));
+            // Store user's input immediately, linked with responseId
             storeConversation(completeUserInput, {
               type: 'user_input',
+              responseId: respId,
               timestamp: new Date().toISOString()
             });
             setTempUserInput([]); // Clear temporary input
@@ -321,13 +327,23 @@ const MainApp = () => {
             if (message.response.status === 'failed') {
               console.error('Response failed:', message.response.status_details);
             } else {
-              // Store assistant's response
+              // Store assistant's response (finalized) and pair with user input if available
               if (currentTranscript) {
+                const userInputForThisResponse = responseUserInputs[message.response.id];
                 storeConversation(currentTranscript, {
                   type: 'assistant_response',
                   responseId: message.response.id,
+                  userInput: userInputForThisResponse,
                   timestamp: new Date().toISOString()
                 });
+                // Clean up map entry
+                if (userInputForThisResponse) {
+                  setResponseUserInputs(prev => {
+                    const clone = { ...prev };
+                    delete clone[message.response.id];
+                    return clone;
+                  });
+                }
               }
             }
             setCurrentResponseId(null);
@@ -358,12 +374,22 @@ const MainApp = () => {
               timestamp: new Date()
             };
             setMessages((prev: Message[]) => [...prev, assistantMessage]);
-            // Store assistant's complete response
+            // Store assistant's complete response, paired with the original user input
+            const userInputForThisResponse = responseUserInputs[message.response_id];
             storeConversation(message.transcript, {
               type: 'assistant_response',
               responseId: message.response_id,
+              userInput: userInputForThisResponse,
               timestamp: new Date().toISOString()
             });
+            // Clean up map entry
+            if (userInputForThisResponse) {
+              setResponseUserInputs(prev => {
+                const clone = { ...prev };
+                delete clone[message.response_id];
+                return clone;
+              });
+            }
             setCurrentTranscript('');
             setIsUserSpeaking(false);
           }
@@ -656,7 +682,7 @@ const MainApp = () => {
 
       console.log('[API] Sending SDP offer to server...');
       // Send the offer's SDP to our server endpoint
-      const model = 'gpt-4o-realtime-preview-2024-12-17';
+      const model = 'gpt-4o-realtime-preview-2025-06-03';
       const sdpResponse = await fetch(`${API_URL}/realtime?model=${model}`, {
         method: 'POST',
         body: offer.sdp,
