@@ -230,11 +230,18 @@ app.get("/session", verifySupabaseToken, async (req, res) => {
         output_audio_format: "pcm16",
         input_audio_transcription: {
           model: "whisper-1",
-          language: "tr", // Specify Turkish for improved transcription accuracy
-          prompt:"Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe’nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin “hipertansiyon”, “diyabet”, “anestezi”, “patoloji” vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse “[anlaşılmadı]” etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir."
-
+          language: "tr",
+          prompt: "Türkçe konuşmaları doğru yaz; tıbbi ve yöresel terimlere özen göster; noktalama ve Türkçe karakterleri (ç, ğ, ı, İ, ö, ş, ü) doğru kullan."
         },
-        turn_detection: null,
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.3,
+          silence_duration_ms: 700,
+          prefix_padding_ms: 400,
+          interrupt_response: true,
+          create_response: true
+        },
+        // Stronger initial session config to bias Turkish ASR from the very first packet
         tools: [],
         tool_choice: "none",
         temperature: 0.7,

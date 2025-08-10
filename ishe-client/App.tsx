@@ -19,7 +19,6 @@ import {
   MediaStream,
   MediaStreamTrack as WebRTCMediaStreamTrack
 } from 'react-native-webrtc';
-import { Audio } from 'expo-av';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,11 +69,13 @@ const MainApp = () => {
   const [tempUserInput, setTempUserInput] = useState<string[]>([]);
   // Map responseId -> complete user input for pairing with assistant response
   const [responseUserInputs, setResponseUserInputs] = useState<Record<string, string>>({});
+  // Robust pairing maps
+  const [userItemToTranscript, setUserItemToTranscript] = useState<Record<string, string>>({});
+  const [assistantItemToResponseId, setAssistantItemToResponseId] = useState<Record<string, string>>({});
+  const [responseIdToUserInput, setResponseIdToUserInput] = useState<Record<string, string>>({});
+  const [userItemToResponseId, setUserItemToResponseId] = useState<Record<string, string>>({});
   
-  // Add new state and ref for audio recording
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const recordingStartTime = useRef<number | null>(null);
+  // Removed expo-av recording. Use WebRTC only.
   
   // Add new state for long-press functionality
   const [pressTimer, setPressTimer] = useState<NodeJS.Timeout | null>(null);
@@ -125,7 +126,13 @@ const MainApp = () => {
   // Function to store conversation in vector database
   const storeConversation = async (text: string, metadata: any = {}) => {
     try {
-      console.log('[API] Storing conversation snippet...');
+      const preview = (text || '').slice(0, 160);
+      console.log('[API] Storing conversation snippet...', {
+        type: metadata?.type,
+        responseId: metadata?.responseId,
+        userInputPreview: (metadata?.userInput || '').slice(0, 160),
+        textPreview: preview + ((text && text.length > 160) ? '...' : '')
+      });
       const response = await fetch(`${API_URL}/api/conversations`, {
         method: 'POST',
         headers: {
@@ -148,136 +155,9 @@ const MainApp = () => {
     }
   };
 
-  // Function to start recording
-  const startRecording = async () => {
-    console.log('[Audio] Attempting to start recording...');
-    // Prevent starting if already recording
-    if (isRecording || recording) {
-      console.log('Recording is already in progress. Skipping start.');
-      return;
-    }
+  // Removed expo-av recording start function
 
-    try {
-      // Request permissions
-      console.log('[Audio] Requesting permissions...');
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        console.error('[Audio] Permission to record was denied');
-        return;
-      }
-      console.log('[Audio] Permissions granted.');
-
-      // Set audio mode
-      console.log('[Audio] Setting audio mode...');
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      console.log('[Audio] Audio mode set.');
-
-      // Start recording
-      console.log('[Audio] Creating and preparing new recording...');
-      const newRecording = new Audio.Recording();
-      await newRecording.prepareToRecordAsync({
-        android: {
-          extension: '.wav',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.wav',
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        web: {
-          mimeType: 'audio/wav',
-          bitsPerSecond: 128000,
-        },
-      });
-      console.log('[Audio] Recording prepared.');
-
-      await newRecording.startAsync();
-      console.log('[Audio] Recording started.');
-      setRecording(newRecording);
-      setIsRecording(true);
-      recordingStartTime.current = Date.now();
-    } catch (error) {
-      console.error('[Audio] Failed to start recording:', error);
-    }
-  };
-
-  // Function to stop recording and upload
-  const stopRecording = async () => {
-    if (!recording) {
-      console.log('[Audio] Stop recording called but no recording object exists.');
-      return;
-    }
-
-    let recordingUri: string | null = null;
-    try {
-      console.log('[Audio] Attempting to stop and unload recording...');
-      await recording.stopAndUnloadAsync();
-      recordingUri = recording.getURI();
-      console.log('[Audio] Recording stopped and unloaded successfully. URI:', recordingUri);
-      
-      // --- Upload Logic ---
-      if (recordingUri) {
-        const duration = Date.now() - (recordingStartTime.current || 0);
-        console.log(`Recording duration: ${duration}ms`);
-        
-        try {
-          // Create form data for upload
-          const formData = new FormData();
-          formData.append('audio', {
-            uri: recordingUri,
-            name: 'recording.wav',
-            type: 'audio/wav', // MIME type
-          } as any); // The 'as any' is often needed due to typing differences
-          formData.append('duration', duration.toString());
-          formData.append('timestamp', new Date().toISOString());
-
-          console.log('Uploading recording...');
-          // Upload the recording
-          const response = await fetch(`${API_URL}/api/audio/upload`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-              // Content-Type is set automatically by fetch for FormData
-            },
-            body: formData,
-          });
-
-          if (!response.ok) {
-             const errorText = await response.text();
-             console.error(`Failed to upload recording. Status: ${response.status}, Body: ${errorText}`);
-             throw new Error(`Failed to upload recording: ${response.status}`);
-          }
-           console.log('Recording uploaded successfully.');
-           
-        } catch (uploadError) {
-           console.error('[API] Error during recording upload:', uploadError);
-           // Decide if you want to bubble this error up or just log it
-        }
-      } else {
-         console.warn('No recording URI found after stopping.');
-      }
-      // --- End Upload Logic ---
-      
-    } catch (error) {
-      // Error specifically from stopAndUnloadAsync
-      console.error('[Audio] Failed to stop or unload recording:', error);
-    } finally {
-      console.log('Resetting recording state.');
-      setRecording(null);
-      setIsRecording(false);
-      recordingStartTime.current = null;
-    }
-  };
+  // Removed expo-av recording stop/upload
 
   // Function to handle incoming messages
   const handleMessage = (event: any) => {
@@ -289,37 +169,120 @@ const MainApp = () => {
         console.log(`[DataChannel] Ignoring message for previous response ID: ${message.response_id}`);
         return;
       }
-
       switch (message.type) {
         case 'conversation.item.input_audio_transcription.completed':
           // Add the transcript to temporary input array
           setTempUserInput((prev: string[]) => [...prev, message.transcript.trim()]);
+          console.log('[Transcript] Chunk completed:', (message.transcript || '').slice(0, 160));
+          // Map final transcript to the originating user item
+          if (message.item_id) {
+            const finalTranscript = (message.transcript || '').trim();
+            if (finalTranscript) {
+              setUserItemToTranscript(prev => ({ ...prev, [message.item_id]: finalTranscript }));
+              // Immediately store user input without pairing
+              console.log('[UserInput] Storing final user transcript from item', message.item_id);
+              storeConversation(finalTranscript, {
+                type: 'user_input',
+                itemId: message.item_id,
+                timestamp: new Date().toISOString()
+              });
+              // If we already know which responseId this user item maps to, link and persist now
+              const mappedResponseId = userItemToResponseId[message.item_id];
+              if (mappedResponseId && !responseIdToUserInput[mappedResponseId]) {
+                console.log('[Pair] user transcript completed -> linking response to user input', {
+                  responseId: mappedResponseId,
+                  userItemId: message.item_id,
+                  userInputPreview: finalTranscript.slice(0, 160)
+                });
+                storeConversation(finalTranscript, {
+                  type: 'user_input',
+                  responseId: mappedResponseId,
+                  timestamp: new Date().toISOString()
+                });
+                setResponseIdToUserInput(prev => ({ ...prev, [mappedResponseId]: finalTranscript }));
+                setResponseUserInputs(prev => ({ ...prev, [mappedResponseId]: finalTranscript }));
+              }
+            }
+          }
           break;
 
         case 'response.created':
           // When a response is created, it means the user has finished speaking
-          // Join all temporary inputs and create a single message
-          if (tempUserInput.length > 0) {
-            const completeUserInput = tempUserInput.join(' ');
-            setMessages((prev: Message[]) => [...prev, {
-              id: Date.now().toString(),
-              role: 'user',
-              text: completeUserInput,
-              timestamp: new Date()
-            }]);
-            // Keep mapping from responseId -> user input to pair neatly later
+          // Prefer the concatenated completed chunks; otherwise fall back to live userTranscript
+          {
             const respId = message.response.id;
-            setResponseUserInputs(prev => ({ ...prev, [respId]: completeUserInput }));
-            // Store user's input immediately, linked with responseId
-            storeConversation(completeUserInput, {
-              type: 'user_input',
-              responseId: respId,
-              timestamp: new Date().toISOString()
-            });
+            const candidateFromChunks = tempUserInput.length > 0 ? tempUserInput.join(' ') : '';
+            const fallbackFromLive = (userTranscript || '').trim();
+            const completeUserInput = (candidateFromChunks || fallbackFromLive).trim();
+
+            if (completeUserInput) {
+              console.log('[Turn] response.created -> finalized user input', {
+                responseId: respId,
+                source: candidateFromChunks ? 'chunks' : 'live',
+                length: completeUserInput.length,
+                preview: completeUserInput.slice(0, 160)
+              });
+              setMessages((prev: Message[]) => [...prev, {
+                id: Date.now().toString(),
+                role: 'user',
+                text: completeUserInput,
+                timestamp: new Date()
+              }]);
+              // Do not store here to avoid duplicates; user input is stored on transcript completed
+            }
             setTempUserInput([]); // Clear temporary input
+            setCurrentResponseId(respId);
           }
-          setCurrentResponseId(message.response.id);
           break;
+
+        case 'response.output_item.added': {
+          // Map assistant item id to response id for later pairing
+          const assistantItemId = message.item?.id;
+          const responseId = message.response_id;
+          if (assistantItemId && responseId) {
+            setAssistantItemToResponseId(prev => ({ ...prev, [assistantItemId]: responseId }));
+          }
+          break;
+        }
+
+        case 'conversation.item.created': {
+          // Assistant item references previous user item; pair that transcript with responseId
+          const item = message.item;
+          if (item?.role === 'assistant' && item?.type === 'message') {
+            const assistantItemId = item.id;
+            const prevUserItemId = message.previous_item_id;
+            if (assistantItemId && prevUserItemId) {
+              const responseId = assistantItemToResponseId[assistantItemId];
+              const userInput = userItemToTranscript[prevUserItemId];
+              if (responseId && userInput && !responseIdToUserInput[responseId]) {
+                console.log('[Pair] assistant item created -> linking response to user input', {
+                  responseId,
+                  assistantItemId,
+                  prevUserItemId,
+                  userInputPreview: userInput.slice(0, 160)
+                });
+                // Persist user turn once we know the definitive responseId
+                storeConversation(userInput, {
+                  type: 'user_input',
+                  responseId,
+                  timestamp: new Date().toISOString()
+                });
+                setResponseIdToUserInput(prev => ({ ...prev, [responseId]: userInput }));
+                // Keep legacy map in sync for existing code paths
+                setResponseUserInputs(prev => ({ ...prev, [responseId]: userInput }));
+              } else if (responseId && !userInput) {
+                // We know which response this user item maps to, but transcript isn't completed yet.
+                setUserItemToResponseId(prev => ({ ...prev, [prevUserItemId]: responseId }));
+                console.log('[Pair] assistant item created -> mapped userItem to response, awaiting transcript', {
+                  responseId,
+                  assistantItemId,
+                  prevUserItemId
+                });
+              }
+            }
+          }
+          break;
+        }
 
         case 'response.done':
           console.log(`[DataChannel] Response done. ID: ${message.response?.id}, Status: ${message.response?.status}`);
@@ -329,7 +292,17 @@ const MainApp = () => {
             } else {
               // Store assistant's response (finalized) and pair with user input if available
               if (currentTranscript) {
-                const userInputForThisResponse = responseUserInputs[message.response.id];
+                const userInputForThisResponse = (
+                  responseIdToUserInput[message.response.id] ||
+                  responseUserInputs[message.response.id] ||
+                  (userTranscript || '').trim() ||
+                  undefined
+                );
+                console.log('[Turn] response.done -> storing assistant response', {
+                  responseId: message.response.id,
+                  assistantTextPreview: currentTranscript.slice(0, 160),
+                  userInputPreview: (userInputForThisResponse || '').slice(0, 160)
+                });
                 storeConversation(currentTranscript, {
                   type: 'assistant_response',
                   responseId: message.response.id,
@@ -337,8 +310,15 @@ const MainApp = () => {
                   timestamp: new Date().toISOString()
                 });
                 // Clean up map entry
-                if (userInputForThisResponse) {
+                if (responseUserInputs[message.response.id]) {
                   setResponseUserInputs(prev => {
+                    const clone = { ...prev };
+                    delete clone[message.response.id];
+                    return clone;
+                  });
+                }
+                if (responseIdToUserInput[message.response.id]) {
+                  setResponseIdToUserInput(prev => {
                     const clone = { ...prev };
                     delete clone[message.response.id];
                     return clone;
@@ -351,7 +331,7 @@ const MainApp = () => {
           break;
 
         case 'transcript':
-          console.log('[DataChannel] Received user transcript');
+          console.log('[Transcript] Live:', (message.text || '').slice(0, 160));
           setUserTranscript(message.text);
           setIsUserSpeaking(true);
           break;
@@ -375,7 +355,17 @@ const MainApp = () => {
             };
             setMessages((prev: Message[]) => [...prev, assistantMessage]);
             // Store assistant's complete response, paired with the original user input
-            const userInputForThisResponse = responseUserInputs[message.response_id];
+            const userInputForThisResponse = (
+              responseIdToUserInput[message.response_id] ||
+              responseUserInputs[message.response_id] ||
+              (userTranscript || '').trim() ||
+              undefined
+            );
+            console.log('[Turn] response.audio_transcript.done -> storing assistant response', {
+              responseId: message.response_id,
+              assistantTextPreview: (message.transcript || '').slice(0, 160),
+              userInputPreview: (userInputForThisResponse || '').slice(0, 160)
+            });
             storeConversation(message.transcript, {
               type: 'assistant_response',
               responseId: message.response_id,
@@ -383,8 +373,15 @@ const MainApp = () => {
               timestamp: new Date().toISOString()
             });
             // Clean up map entry
-            if (userInputForThisResponse) {
+            if (responseUserInputs[message.response_id]) {
               setResponseUserInputs(prev => {
+                const clone = { ...prev };
+                delete clone[message.response_id];
+                return clone;
+              });
+            }
+            if (responseIdToUserInput[message.response_id]) {
+              setResponseIdToUserInput(prev => {
                 const clone = { ...prev };
                 delete clone[message.response_id];
                 return clone;
@@ -458,13 +455,18 @@ const MainApp = () => {
       type: 'session.update',
       session: {
         input_audio_transcription: {
-          model: "whisper-1",
-          language: "tr", // Specify Turkish for improved transcription accuracy
-          prompt: `Bu transkriptör, kullanıcının konuşmalarını (özellikle tıbbi terimler, eski Türkçe ifadeler ve yöresel kelimeler dahil) doğru, eksiksiz ve bağlama uygun şekilde metne dönüştürmek amacıyla tasarlanmıştır. Dinleme esnasında her kelime, cümle ve ifadenin bağlamı doğru algılanmalı; tıbbi, eski Türkçe ve yöresel ifadelerin yazım ve anlamına özen gösterilmelidir. Türkçe'nin aksan, vurgu ve telaffuz özellikleri dikkate alınarak, özellikle tıbbi ve eski ifadelerin doğru telaffuzuna önem verilmelidir. Tıbbi terimler (örneğin "hipertansiyon", "diyabet", "anestezi", "patoloji" vb.) doğru yazılmalı, anlam bütünlüğü korunmalıdır; eski/yöresel ifadeler en doğru karşılıklarıyla aktarılmalıdır. Noktalama ve yazım kurallarına özen gösterilmeli, anlaşılmayan ifadeler için en yakın doğru tahmin yapılmalı ve gerekirse "[anlaşılmadı]" etiketi eklenmelidir. Konuşma, söylemek istendiği şekilde, bağlamı bozmadan eksiksiz metne çevrilmelidir.`
-
+          model: 'whisper-1',
+          language: 'tr',
+          prompt: 'Türkçe konuşmaları doğru yaz; tıbbi ve yöresel terimlere özen göster; noktalama ve Türkçe karakterleri (ç, ğ, ı, İ, ö, ş, ü) doğru kullan.'
         },
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16', 
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.3,
+          silence_duration_ms: 900,
+          prefix_padding_ms: 500,
+          interrupt_response: true,
+          create_response: true
+        },
         modalities: ['audio', 'text'],
         instructions: systemPrompt
       }
@@ -482,10 +484,7 @@ const MainApp = () => {
       }
       console.log('[Init] Access token found.');
 
-      // Start recording
-      console.log('[Init] Calling startRecording...');
-      await startRecording();
-      console.log('[Init] startRecording finished.');
+      // Removed separate expo-av recording; using WebRTC stream only
 
       console.log('[API] Requesting session token from server...');
       // Get an ephemeral key from your server
@@ -557,10 +556,12 @@ const MainApp = () => {
           // Stop any existing remote stream
           if (remoteStream) {
             console.log('[WebRTC] Stopping existing remote stream');
-            const tracks = remoteStream.getTracks();
-            tracks.forEach((track: MediaStreamTrack) => {
-              track.stop();
-              remoteStream.removeTrack(track);
+            const tracks: any[] = (remoteStream as any).getTracks?.() || [];
+            tracks.forEach((track: any) => {
+              if (track && typeof track.stop === 'function') track.stop();
+              if (remoteStream && typeof (remoteStream as any).removeTrack === 'function') {
+                (remoteStream as any).removeTrack(track);
+              }
             });
             setRemoteStream(null);
           }
@@ -601,11 +602,10 @@ const MainApp = () => {
         console.log('[Media] Requesting microphone access...');
         const constraints = {
           audio: {
-            sampleRate: 16000,
             channelCount: 1,
             echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            noiseSuppression: false,
+            autoGainControl: false
           },
           video: false
         };
@@ -633,34 +633,24 @@ const MainApp = () => {
         localStreamRef.current = localStream;
         
         // Add only one audio track to the peer connection
-        const audioTracks = localStream.getAudioTracks();
+        const audioTracks: any[] = (localStream as any).getAudioTracks?.() || [];
         if (audioTracks.length > 0) {
-          audioTracks[0].enabled = true;
-          pc.addTrack(audioTracks[0], localStream);
+          (audioTracks[0] as any).enabled = true;
+          pc.addTrack(audioTracks[0] as any, localStream as any);
           console.log('[Media] Added audio track to peer connection:', {
-            label: audioTracks[0].label,
-            enabled: audioTracks[0].enabled
+            label: (audioTracks[0] as any).label,
+            enabled: (audioTracks[0] as any).enabled
           });
           
           // Disable any additional tracks
-          audioTracks.slice(1).forEach(track => {
+          (audioTracks as any[]).slice(1).forEach((track: any) => {
             track.enabled = false;
-            track.stop();
-            console.log('[Media] Disabled additional audio track:', track.label);
+            if (typeof track.stop === 'function') track.stop();
+            console.log('[Media] Disabled additional audio track:', track?.label);
           });
         }
 
-        // Send initial audio buffer
-        const audioBuffer = {
-          type: 'input_audio_buffer.append',
-          audio_buffer: {
-            format: 'pcm16',
-            sample_rate: 16000,
-            channel_count: 1
-          }
-        };
-        dc.send(JSON.stringify(audioBuffer));
-        console.log('[Media] Sent initial audio buffer configuration');
+        // No need to send custom audio buffer config; use defaults to preserve native quality
       } catch (error) {
         console.error('[Media] Error accessing microphone:', error);
         throw error; // Rethrow to trigger cleanup in outer catch
@@ -730,10 +720,7 @@ const MainApp = () => {
   // Function to stop the session
   async function stop() {
     console.log('[Stop] Stopping session...');
-    // Stop recording
-    console.log('[Stop] Calling stopRecording...');
-    await stopRecording();
-    console.log('[Stop] stopRecording finished.');
+    // Removed separate expo-av recording stop
     
     // Stop and remove all remote stream tracks
     if (remoteStream) {
