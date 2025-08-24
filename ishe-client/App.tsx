@@ -400,6 +400,14 @@ const MainApp = () => {
             setIsModelSpeaking(true);
             // Clear previous transcript when model starts speaking
             setCurrentTranscript('');
+            // Re-assert speakerphone routing when assistant speech starts
+            try {
+              InCallManager.setForceSpeakerphoneOn(true);
+              InCallManager.setSpeakerphoneOn?.(true);
+              console.log('[Audio] Speakerphone re-asserted on speech start');
+            } catch (e) {
+              console.warn('[Audio] Failed to re-assert speaker on speech start:', e);
+            }
           }
           break;
 
@@ -584,6 +592,14 @@ const MainApp = () => {
           }
           
           setRemoteStream(newStream);
+          // Re-assert speakerphone routing when remote audio becomes available
+          try {
+            InCallManager.setForceSpeakerphoneOn(true);
+            InCallManager.setSpeakerphoneOn?.(true);
+            console.log('[Audio] Speakerphone re-asserted after remote track');
+          } catch (e) {
+            console.warn('[Audio] Failed to re-assert speaker after track:', e);
+          }
         }
       });
 
@@ -661,7 +677,8 @@ const MainApp = () => {
       try {
         InCallManager.start({ media: 'audio' });
         // iOS/Android: force speakerphone
-        InCallManager.setForceSpeakerphoneOn('on');
+        InCallManager.setForceSpeakerphoneOn(true);
+        InCallManager.setSpeakerphoneOn?.(true);
         // Keep screen on while in session (optional)
         InCallManager.setKeepScreenOn?.(true);
         console.log('[Audio] Speakerphone forced ON');
@@ -710,6 +727,14 @@ const MainApp = () => {
       };
       await pc.setRemoteDescription(answer);
       console.log('[WebRTC] Set remote description.');
+      // Re-assert speakerphone routing after remote description is set
+      try {
+        InCallManager.setForceSpeakerphoneOn(true);
+        InCallManager.setSpeakerphoneOn?.(true);
+        console.log('[Audio] Speakerphone re-asserted after remote description');
+      } catch (e) {
+        console.warn('[Audio] Failed to re-assert speaker after remote description:', e);
+      }
 
       // Add ICE candidate handler
       pc.addEventListener('icecandidate', (event: any) => {
@@ -792,7 +817,8 @@ const MainApp = () => {
 
     // Reset audio routing
     try {
-      InCallManager.setForceSpeakerphoneOn('off');
+      InCallManager.setForceSpeakerphoneOn(false);
+      InCallManager.setSpeakerphoneOn?.(false);
       InCallManager.setKeepScreenOn?.(false);
       InCallManager.stop();
       console.log('[Audio] Speakerphone reset OFF');
