@@ -23,6 +23,7 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { generateSystemPromptToAskQuestions } from './src/utils/systemPrompt';
+import InCallManager from 'react-native-incall-manager';
 
 // Define the API URL based on platform
 // For local development:
@@ -656,6 +657,18 @@ const MainApp = () => {
         throw error; // Rethrow to trigger cleanup in outer catch
       }
 
+      // Ensure audio routes to loudspeaker once session starts
+      try {
+        InCallManager.start({ media: 'audio' });
+        // iOS/Android: force speakerphone
+        InCallManager.setForceSpeakerphoneOn('on');
+        // Keep screen on while in session (optional)
+        InCallManager.setKeepScreenOn?.(true);
+        console.log('[Audio] Speakerphone forced ON');
+      } catch (e) {
+        console.warn('[Audio] Failed to set speakerphone:', e);
+      }
+
       // Create an SDP offer and set it as the local description
       console.log('[WebRTC] Creating SDP offer...');
       const offer = await pc.createOffer({
@@ -776,6 +789,16 @@ const MainApp = () => {
     setCurrentResponseId(null);
     setTempUserInput([]); // Clear temporary input when stopping
     setMessages([]); // Clear messages when stopping
+
+    // Reset audio routing
+    try {
+      InCallManager.setForceSpeakerphoneOn('off');
+      InCallManager.setKeepScreenOn?.(false);
+      InCallManager.stop();
+      console.log('[Audio] Speakerphone reset OFF');
+    } catch (e) {
+      console.warn('[Audio] Failed to reset speakerphone:', e);
+    }
   }
 
   return (
